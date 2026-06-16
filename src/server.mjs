@@ -49,6 +49,7 @@ import { loadCollectorConfig } from './collector-config.mjs';
 import { detectCollectors } from './collector-registry.mjs';
 import { runPrivacyCheck } from './privacy-check.mjs';
 import { buildModelPolicy, formatModelPolicyMarkdown } from './model-policy.mjs';
+import { buildLiveSnapshot } from './live.mjs';
 
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || process.env.BIND_HOST || '127.0.0.1';
@@ -295,6 +296,21 @@ function handleApi(req, url, res) {
   }
   if (url.pathname === '/api/collectors' && req.method === 'GET') {
     sendJson(res, { collectors: detectCollectors() });
+    return;
+  }
+  if (url.pathname === '/api/live' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '实时监控接口')) return;
+    sendJson(res, buildLiveSnapshot({
+      sessions: liveSessions(),
+      tokenEvents: liveTokenEvents(),
+      runs: all(`
+        SELECT device, source, status, message, collected_at AS collectedAt
+        FROM collection_runs
+        ORDER BY id DESC
+        LIMIT 5
+      `),
+      windowMinutes: Number(url.searchParams.get('windowMinutes') || 15)
+    }));
     return;
   }
   if (url.pathname === '/api/privacy-check' && req.method === 'GET') {
@@ -764,6 +780,7 @@ async function handleIngest(req, res) {
 function serveStatic(pathname, res) {
   const filePath = pathname === '/' ? join(staticDir, 'index.html')
     : pathname === '/review' ? join(staticDir, 'index.html')
+      : pathname === '/live' ? join(staticDir, 'index.html')
     : join(staticDir, pathname);
   if (!filePath.startsWith(staticDir) || !existsSync(filePath)) {
     res.writeHead(404);
@@ -780,6 +797,45 @@ function one(sql) {
 
 function all(sql) {
   return db.prepare(sql).all();
+}
+
+function liveSessions() {
+  return all(`
+    SELECT device, source, session_id AS sessionId, last_activity AS lastActivity,
+      project_path AS projectPath,
+      input_tokens AS inputTokens,
+      output_tokens AS outputTokens,
+      cache_creation_tokens AS cacheCreationTokens,
+      cache_read_tokens AS cacheReadTokens,
+      cached_input_tokens AS cachedInputTokens,
+      reasoning_output_tokens AS reasoningOutputTokens,
+      total_tokens AS totalTokens,
+      cost_usd AS costUSD
+    FROM session_usage
+    ORDER BY last_activity DESC
+    LIMIT 100
+  `).map(session => ({
+    ...session,
+    model: modelFromSessionId(session.sessionId),
+    cacheReadTokens: Number(session.cacheReadTokens || 0) + Number(session.cachedInputTokens || 0)
+  }));
+}
+
+function liveTokenEvents() {
+  return all(`
+    SELECT event_id AS eventId, device, source, session_id AS sessionId,
+      timestamp, model,
+      input_tokens AS inputTokens,
+      output_tokens AS outputTokens,
+      cache_read_tokens AS cacheReadTokens,
+      cache_creation_tokens AS cacheCreationTokens,
+      reasoning_tokens AS reasoningTokens,
+      tool_category AS toolCategory,
+      file_extension AS fileExtension
+    FROM token_events
+    ORDER BY timestamp DESC
+    LIMIT 500
+  `);
 }
 
 function buildAutoAttributionContext() {

@@ -1,8 +1,8 @@
 import { hostname } from 'node:os';
 import { resolve } from 'node:path';
-import { openDb, recordRun, upsertDaily, upsertSession } from './db.mjs';
+import { openDb, recordRun, upsertDaily, upsertSession, upsertTokenEvent } from './db.mjs';
 import { loadPricing } from './pricing.mjs';
-import { collectorLabel, enabledCollectorIds, stableCollectors } from './collector-registry.mjs';
+import { collectableCollectors, collectorLabel, enabledCollectorIds } from './collector-registry.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const device = args.device || hostname();
@@ -12,6 +12,7 @@ const exportPayload = {
   collectedAt: new Date().toISOString(),
   daily: [],
   sessions: [],
+  tokenEvents: [],
   runs: []
 };
 
@@ -30,17 +31,19 @@ db.close();
 async function collectLocal() {
   let anyError = false;
   const enabled = enabledCollectors();
-  const collectors = stableCollectors().filter(({ id }) => enabled.has(id));
+  const includeExperimental = Boolean(args.sources || args.collectors || args.experimental);
+  const collectors = collectableCollectors({ includeExperimental }).filter(({ id }) => enabled.has(id));
 
   console.log(`[collect] enabled=${Array.from(enabled).join(',') || 'none'}`);
 
   for (const { module, label } of collectors) {
     let graphJson;
     let modelsJson;
+    let tokenEvents;
 
     try {
       const { collect } = await import(module);
-      ({ graphJson, modelsJson } = await collect(pricingData));
+      ({ graphJson, modelsJson, tokenEvents } = await collect(pricingData));
     } catch (error) {
       const run = {
         device,
@@ -65,17 +68,21 @@ async function collectLocal() {
     runInTransaction(db, () => sessionRows.forEach((row) => upsertSession(db, row)));
     exportPayload.sessions.push(...sessionRows);
 
+    const eventRows = normalizeTokenEventRows(tokenEvents, device);
+    runInTransaction(db, () => eventRows.forEach((row) => upsertTokenEvent(db, row)));
+    exportPayload.tokenEvents.push(...eventRows);
+
     const run = {
       device,
       source: label,
       status: dailyRows.length || sessionRows.length ? 'ok' : 'empty',
-      message: `daily=${dailyRows.length}, workspace_model=${sessionRows.length}`,
+      message: `daily=${dailyRows.length}, workspace_model=${sessionRows.length}, token_events=${eventRows.length}`,
       collectedAt: exportPayload.collectedAt,
       command: `js-collector:${module}`
     };
     recordRun(db, run);
     exportPayload.runs.push(run);
-    console.log(`[${label}] daily=${dailyRows.length}, workspace_model=${sessionRows.length}`);
+    console.log(`[${label}] daily=${dailyRows.length}, workspace_model=${sessionRows.length}, token_events=${eventRows.length}`);
   }
 
   if (anyError) process.exitCode = 1;
@@ -84,9 +91,9 @@ async function collectLocal() {
 function enabledCollectors() {
   const sourceArg = args.sources || args.collectors;
   if (sourceArg) {
-    return new Set(String(sourceArg).split(',').map(item => item.trim().toLowerCase()).filter(Boolean));
+    return enabledCollectorIds({ includeExperimental: true, values: sourceArg });
   }
-  return enabledCollectorIds();
+  return enabledCollectorIds({ includeExperimental: Boolean(args.experimental) });
 }
 
 function runInTransaction(database, work) {
@@ -151,6 +158,27 @@ function normalizeSessionRows(json, deviceName) {
       costUSD: entry.cost || 0
     };
   });
+}
+
+function normalizeTokenEventRows(events, deviceName) {
+  if (!Array.isArray(events)) return [];
+  return events.map((event) => ({
+    device: deviceName,
+    source: sourceLabel(event.source || event.client),
+    sessionId: event.sessionId || event.session_id || 'unknown-session',
+    timestamp: event.timestamp || exportPayload.collectedAt,
+    model: event.model || 'unknown',
+    inputTokens: positiveNumber(event.inputTokens ?? event.input_tokens),
+    outputTokens: positiveNumber(event.outputTokens ?? event.output_tokens),
+    cacheReadTokens: positiveNumber(event.cacheReadTokens ?? event.cache_read_tokens),
+    cacheCreationTokens: positiveNumber(event.cacheCreationTokens ?? event.cache_creation_tokens),
+    reasoningTokens: positiveNumber(event.reasoningTokens ?? event.reasoning_tokens),
+    toolCategory: event.toolCategory ?? event.tool_category ?? null,
+    fileExtension: event.fileExtension ?? event.file_extension ?? null,
+    repoPathHash: event.repoPathHash ?? event.repo_path_hash ?? null,
+    privacyLevel: event.privacyLevel ?? event.privacy_level ?? 'safe',
+    eventId: event.eventId ?? event.event_id ?? null
+  }));
 }
 
 function normalizeTokens(tokens = {}) {

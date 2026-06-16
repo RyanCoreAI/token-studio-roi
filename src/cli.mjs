@@ -18,8 +18,12 @@ try {
     await startCommand({ demo: false });
   } else if (command === 'demo') {
     await demoCommand();
+  } else if (command === 'live') {
+    await startCommand({ demo: false, route: '/live' });
   } else if (command === 'collect') {
     await collectCommand();
+  } else if (command === 'collectors') {
+    await collectorsCommand();
   } else if (command === 'doctor') {
     await doctorCommand();
   } else if (command === 'privacy-check') {
@@ -41,7 +45,7 @@ async function demoCommand() {
   await startCommand({ demo: true, dbPath });
 }
 
-async function startCommand({ demo = false, dbPath = null } = {}) {
+async function startCommand({ demo = false, dbPath = null, route = '/' } = {}) {
   const apiPort = Number(args.apiPort || args.port || await freePort(4173));
   const uiPort = Number(args.uiPort || await freePort(5173));
   const env = {
@@ -67,7 +71,7 @@ async function startCommand({ demo = false, dbPath = null } = {}) {
     stdio: 'inherit',
     windowsHide: true
   });
-  console.log(`[token-studio] UI  http://127.0.0.1:${uiPort}${demo ? '  (Demo Mode)' : ''}`);
+  console.log(`[token-studio] UI  http://127.0.0.1:${uiPort}${route}${demo ? '  (Demo Mode)' : ''}`);
   console.log(`[token-studio] API http://127.0.0.1:${apiPort}`);
   await waitForChildren([server, client]);
 }
@@ -105,6 +109,23 @@ async function doctorCommand() {
   for (const item of collectors) {
     console.log(`- ${item.id}: ${item.supportStatus}, detected=${item.detected ? 'yes' : 'no'}, privacy=${item.privacyLevel}`);
     if (item.existingRoots.length) console.log(`  roots=${item.existingRoots.join('; ')}`);
+    if (item.note) console.log(`  note=${item.note}`);
+  }
+}
+
+async function collectorsCommand() {
+  const collectors = detectCollectors();
+  if (args.json) {
+    console.log(JSON.stringify({ collectors }, null, 2));
+    return;
+  }
+
+  console.log('Token Studio Collectors');
+  for (const item of collectors) {
+    console.log(`- ${item.id}: ${item.label}`);
+    console.log(`  status=${item.supportStatus}, default=${item.defaultEnabled ? 'yes' : 'no'}, detected=${item.detected ? 'yes' : 'no'}`);
+    console.log(`  privacy=${item.privacyLevel}, readsConversationContent=${item.readsConversationContent ? 'yes' : 'no'}, tokenReliability=${item.tokenReliability}`);
+    console.log(`  fields=${item.dataFields.join(',') || 'none'}`);
     if (item.note) console.log(`  note=${item.note}`);
   }
 }
@@ -207,6 +228,8 @@ function printHelp() {
     'Commands:',
     '  token-studio demo [--seed-only] [--db data/demo.sqlite]',
     '  token-studio start [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
+    '  token-studio live [--db data/usage.sqlite]',
+    '  token-studio collectors [--json]',
     '  token-studio collect --sources claude,codex [--yes]',
     '  token-studio doctor',
     '  token-studio privacy-check [--include-untracked]'

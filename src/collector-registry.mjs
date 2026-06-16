@@ -3,6 +3,31 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { configuredPath, configuredPaths, expandPath } from './collector-config.mjs';
 
+const STABLE_FIELDS = [
+  'date',
+  'source',
+  'session_id',
+  'project',
+  'model',
+  'input_tokens',
+  'output_tokens',
+  'cache_tokens',
+  'reasoning_tokens'
+];
+
+const EXPERIMENTAL_FIELDS = [
+  'timestamp',
+  'source',
+  'session_id',
+  'project_label',
+  'model',
+  'input_tokens',
+  'output_tokens',
+  'cache_tokens',
+  'tool_category',
+  'file_extension'
+];
+
 export const COLLECTOR_REGISTRY = [
   stableCollector('claude', 'Claude Code', './collectors/claude-code.mjs', {
     privacyLevel: 'metadata-only',
@@ -34,29 +59,34 @@ export const COLLECTOR_REGISTRY = [
     roots: () => [configuredPath('hermes', 'dbPath', '~/.hermes/state.db')]
   }),
   experimentalCollector('cursor', 'Cursor', {
-    privacyLevel: 'detected-only',
+    module: './collectors/cursor.mjs',
+    privacyLevel: 'metadata-only',
     roots: () => cursorRoots(),
-    note: 'Cursor local token usage is not stable across installs; Token Studio detects it but does not invent usage rows.'
+    note: 'Experimental: only explicit local usage records with token fields are imported; chat content is ignored.'
   }),
   experimentalCollector('copilot', 'GitHub Copilot CLI', {
-    privacyLevel: 'detected-only',
+    module: './collectors/copilot.mjs',
+    privacyLevel: 'metadata-only',
     roots: () => copilotRoots(),
-    note: 'Copilot local logs are detected only until a reliable token usage fixture is available.'
+    note: 'Experimental: local token rows are imported only when token fields are present.'
   }),
   experimentalCollector('qwen', 'Qwen Code', {
-    privacyLevel: 'detected-only',
+    module: './collectors/qwen.mjs',
+    privacyLevel: 'metadata-only',
     roots: () => ['~/.qwen', '~/.qwen-code'].map(expandPath),
-    note: 'Planned v4.1 source; disabled until token fixtures are verified.'
+    note: 'Experimental: supports fixture-backed structured usage logs without transcript ingestion.'
   }),
   experimentalCollector('kimi', 'Kimi / Moonshot Coding CLI', {
-    privacyLevel: 'detected-only',
+    module: './collectors/kimi.mjs',
+    privacyLevel: 'metadata-only',
     roots: () => ['~/.kimi', '~/.moonshot'].map(expandPath),
-    note: 'Planned v4.1 source; disabled until token fixtures are verified.'
+    note: 'Experimental: supports fixture-backed structured usage logs without transcript ingestion.'
   }),
   experimentalCollector('goose', 'Goose', {
-    privacyLevel: 'detected-only',
+    module: './collectors/goose.mjs',
+    privacyLevel: 'metadata-only',
     roots: () => ['~/.config/goose', '~/.goose'].map(expandPath),
-    note: 'Preferred v4.1 candidate over Amp for local-first workflow coverage.'
+    note: 'Experimental: supports explicit token metadata only; no prompt or response text is imported.'
   })
 ];
 
@@ -69,6 +99,12 @@ export function listCollectors() {
 
 export function stableCollectors() {
   return COLLECTOR_REGISTRY.filter(item => item.supportStatus === 'stable');
+}
+
+export function collectableCollectors({ includeExperimental = false } = {}) {
+  return COLLECTOR_REGISTRY.filter(item =>
+    item.module && (item.supportStatus === 'stable' || (includeExperimental && item.supportStatus === 'experimental'))
+  );
 }
 
 export function collectorById(id) {
@@ -93,20 +129,26 @@ export function detectCollectors() {
       configuredRoots: roots,
       existingRoots,
       module: item.module || null,
+      fixtures: item.fixtures || null,
+      dataFields: item.dataFields || [],
+      readsConversationContent: Boolean(item.readsConversationContent),
+      tokenReliability: item.tokenReliability || 'unknown',
+      fixtureBacked: Boolean(item.fixtures),
       note: item.note || null
     };
   });
 }
 
-export function enabledCollectorIds({ includeExperimental = false } = {}) {
+export function enabledCollectorIds({ includeExperimental = false, values = null } = {}) {
   const envValue = process.env.TOKEN_STUDIO_COLLECTORS || process.env.AI_TOKEN_DASHBOARD_COLLECTORS;
   const configRoot = globalCollectorConfig();
-  const values = envValue
-    ? envValue.split(',')
-    : Array.isArray(configRoot.enabledCollectors) ? configRoot.enabledCollectors
+  const rawValues = values != null
+    ? String(values).split(',')
+    : envValue ? envValue.split(',')
+      : Array.isArray(configRoot.enabledCollectors) ? configRoot.enabledCollectors
       : stableCollectors().filter(item => item.defaultEnabled).map(item => item.id);
 
-  const ids = values.map(item => String(item).trim().toLowerCase()).filter(Boolean);
+  const ids = rawValues.map(item => String(item).trim().toLowerCase()).filter(Boolean);
   const allowed = new Set(COLLECTOR_REGISTRY
     .filter(item => includeExperimental || item.supportStatus === 'stable')
     .map(item => item.id));
@@ -122,6 +164,9 @@ function stableCollector(id, label, module, options) {
     defaultEnabled: true,
     supportStatus: 'stable',
     fixtures: `test/fixtures/collectors/${id}`,
+    dataFields: STABLE_FIELDS,
+    readsConversationContent: false,
+    tokenReliability: 'native-token-fields',
     roots: options.roots
   };
 }
@@ -130,11 +175,14 @@ function experimentalCollector(id, label, options) {
   return {
     id,
     label,
-    module: null,
+    module: options.module || null,
     privacyLevel: options.privacyLevel,
     defaultEnabled: false,
-    supportStatus: 'detected-only',
-    fixtures: null,
+    supportStatus: options.module ? 'experimental' : 'detected-only',
+    fixtures: `test/fixtures/collectors/${id}`,
+    dataFields: EXPERIMENTAL_FIELDS,
+    readsConversationContent: false,
+    tokenReliability: 'explicit-token-fields-only',
     roots: options.roots,
     note: options.note
   };

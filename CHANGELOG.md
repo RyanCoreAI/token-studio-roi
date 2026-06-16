@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.1.0
+
+- Added `/live` lightweight local monitor for recent token burn rate, cache hit, active sessions, sources, and models.
+- Added `token-studio live` and `token-studio collectors`.
+- Upgraded Cursor, GitHub Copilot CLI, Qwen Code, Kimi, and Goose to opt-in experimental collectors.
+- Added fixture-backed structured usage parsing that skips rows without explicit token fields.
+- Extended `GET /api/collectors` with privacy, token reliability, data field, and fixture metadata.
+- Added public launch checklist and collector support matrix.
+- Expanded competitive notes and README differentiation against token-meter style tools.
+
 ## 4.0.0
 
 - Repackaged the project as `@ryan/token-studio-roi` with the `token-studio` CLI.

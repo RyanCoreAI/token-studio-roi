@@ -13,7 +13,7 @@ Token Studio ROI uses a collector registry instead of ad-hoc collector labels.
 
 These sources can produce normalized `daily_usage` and `session_usage` rows when their local metadata stores exist.
 
-## Detected-Only Sources
+## Experimental v4.1 Sources
 
 - Cursor
 - GitHub Copilot CLI
@@ -21,13 +21,17 @@ These sources can produce normalized `daily_usage` and `session_usage` rows when
 - Kimi / Moonshot Coding CLI
 - Goose
 
-Detected-only sources are visible in `token-studio doctor` and `GET /api/collectors`, but they do not write usage rows until reliable token fixtures exist.
+Experimental sources are opt-in. They import only explicit structured token fields from JSON/JSONL metadata and skip records without reliable token fields.
+
+See [collector-support-matrix.md](collector-support-matrix.md) for status, privacy, and token reliability.
 
 ## Commands
 
 ```bash
 node src/cli.mjs doctor
+node src/cli.mjs collectors
 node src/cli.mjs collect --sources=claude,codex
+node src/cli.mjs collect --sources=cursor --yes
 ```
 
 `collect` requires explicit confirmation. Non-interactive shells refuse to scan local AI logs unless `--yes` is provided.

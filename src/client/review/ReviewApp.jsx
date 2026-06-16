@@ -292,6 +292,7 @@ function ReviewDashboard({ rawData }) {
             <div className="page-switch">
               <a href="/" className="page-chip">看板</a>
               <span className="page-chip active">复盘</span>
+              <a href="/live" className="page-chip">实时</a>
             </div>
           </div>
           <div className="period-switch">

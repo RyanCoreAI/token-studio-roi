@@ -12,7 +12,7 @@ export function loadCollectorConfig() {
     resolve(process.cwd(), 'config', 'collectors.json');
 
   try {
-    cachedConfig = JSON.parse(readFileSync(configPath, 'utf8'));
+    cachedConfig = JSON.parse(readFileSync(configPath, 'utf8').replace(/^\uFEFF/, ''));
   } catch {
     cachedConfig = { collectors: {} };
   }

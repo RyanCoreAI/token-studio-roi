@@ -22,6 +22,7 @@ function Topbar({ lastSync, onRefresh, refreshing, onCollect, collecting, collec
         <div className="page-switch">
           <span className="page-chip active">看板</span>
           <a href="/review" className="page-chip">复盘</a>
+          <a href="/live" className="page-chip">实时</a>
         </div>
         {demoMode && <span className="demo-mode-badge">Demo Mode</span>}
       </div>

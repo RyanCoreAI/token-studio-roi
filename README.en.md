@@ -28,6 +28,8 @@ See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller compet
 Recommended Node.js: 24. Minimum: `>=22.12.0`.
 
 ```bash
+git clone https://github.com/RyanCoreAI/token-studio-roi.git
+cd token-studio-roi
 npm install
 npm run demo
 ```
@@ -37,6 +39,8 @@ CLI:
 ```bash
 node src/cli.mjs demo
 node src/cli.mjs start
+node src/cli.mjs live
+node src/cli.mjs collectors
 node src/cli.mjs doctor
 node src/cli.mjs privacy-check
 ```
@@ -46,6 +50,8 @@ Target npm entry after publishing:
 ```bash
 npx @ryan/token-studio-roi demo
 npx @ryan/token-studio-roi start
+npx @ryan/token-studio-roi live
+npx @ryan/token-studio-roi collectors
 npx @ryan/token-studio-roi collect --sources=claude,codex
 npx @ryan/token-studio-roi doctor
 npx @ryan/token-studio-roi privacy-check
@@ -64,15 +70,22 @@ Non-interactive shells refuse collection unless `--yes` is passed.
 ## Core Features
 
 - Collector registry: Claude Code, Codex CLI, Gemini CLI, OpenCode, OpenClaw, and Hermes Agent are v4.0 stable sources.
-- Detected-only sources: Cursor, GitHub Copilot CLI, Qwen Code, Kimi, and Goose are detected but do not produce fake token rows.
+- Experimental sources: Cursor, GitHub Copilot CLI, Qwen Code, Kimi, and Goose import only explicit token fields and never produce fake token rows.
 - Official-price conversion: published provider token prices only; unpriced models stay unpriced.
 - Work attribution: project, task type, output status, purpose, stage, value, and notes.
 - Output evidence: stores only URL, label, and output type.
 - ROI Evidence Score: checks whether attribution, outputs, manual confirmation, and work items are strong enough for ROI decisions.
 - ROI Advisor: local rules only, no LLM calls and no extra token usage.
 - Model Policy export: generates `MODEL_POLICY.md` from local structured history.
+- Live Monitor: `/live` shows recent 15-minute token, model, cache, and burn-rate metadata.
 - Privacy check: scans for real DBs, AI log directories, `.env`, generated exports, personal paths, and likely secrets.
 - Demo mode: public demos use synthetic data and show a Demo Mode badge.
+
+## Why Not Just ccusage / CodeBurn?
+
+ccusage, CodeBurn, TokenTracker, and token-dashboard are closer to token meters, TUIs, live burn-rate monitors, or broad collector dashboards. Token Studio ROI is not trying to replace those tools. It turns local token usage into reviewable work evidence: projects, tasks, purpose, stage, value, output links, work items, ROI Evidence, Advisor actions, and Model Policy.
+
+If you only need to know how many tokens you used today, ccusage or CodeBurn may be lighter. If you want to understand what those tokens produced and how to change next week's model strategy, Token Studio ROI is the better fit.
 
 ## Privacy Boundary
 
@@ -99,6 +112,7 @@ Stable interfaces:
 
 - `GET /api/data`
 - `GET /api/collectors`
+- `GET /api/live`
 - `GET /api/privacy-check`
 - `GET /api/model-policy.md`
 - `POST /api/collect`
@@ -140,6 +154,7 @@ Default URLs:
 - [ ] `npm run build`
 - [ ] `npm run privacy:check`
 - [ ] demo screenshots come from demo mode
+- [ ] `/live` loads from demo mode or temporary SQLite
 - [ ] no real `data/usage.sqlite`
 - [ ] no `.claude/`, `.codex/`, `.env`
 - [ ] no raw conversation content

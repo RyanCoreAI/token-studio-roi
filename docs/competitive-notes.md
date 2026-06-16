@@ -4,13 +4,13 @@ Token Studio ROI is positioned as a local AI coding ROI review system, not only 
 
 ## Referenced Projects
 
-| Project | Public focus | Useful reference | Token Studio ROI difference |
-|---|---|---|---|
-| [ccusage](https://ccusage.com/) | Local CLI usage and estimated cost across many coding agents | Broad collector coverage, offline pricing, cache token accounting | Token Studio ROI adds work attribution, output links, ROI evidence score, and weekly review exports. |
-| [CodeBurn](https://github.com/getagentseal/codeburn) | Interactive TUI for Claude Code, Codex, and Cursor cost observability | Fast `npx` startup, terminal-first usage review, provider coverage | Token Studio ROI uses a browser review workspace with work items and advisor actions. |
-| [token-dashboard](https://github.com/nateherkai/token-dashboard) | Local Claude Code JSONL dashboard with cost analytics, heatmaps, and tips | Per-prompt hotspots, file/tool heatmaps, cache analytics | Token Studio ROI keeps transcript content out of the product and focuses on project/task/output ROI. |
-| [Claude Code Usage Monitor](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor) | Real-time terminal monitoring with burn rate and prediction | Live session awareness and limit warnings | Token Studio ROI defers live monitoring and makes weekly review and model strategy the main surface. |
-| [TokenTracker](https://github.com/mm7894215/TokenTracker) | Local-first dashboard, native tray/menu bar, widgets, many coding tools | Zero-config setup, desktop packaging, 22-tool coverage | Token Studio ROI is lighter-weight today but has deeper work/output attribution and publishable review artifacts. |
+| Project | Public focus | Coverage strength | Launch strength | Token Studio ROI difference |
+|---|---|---|---|---|
+| [ccusage](https://ccusage.com/) | Local CLI usage and estimated cost across many coding agents | Broad collector coverage, offline pricing, cache token accounting | Strong CLI workflow | Token Studio ROI adds work attribution, output links, ROI evidence score, and weekly review exports. |
+| [CodeBurn](https://github.com/getagentseal/codeburn) | Interactive TUI for Claude Code, Codex, and Cursor cost observability | Claude, Codex, Cursor oriented | Fast `npx` terminal experience | Token Studio ROI uses a browser review workspace with work items and advisor actions. |
+| [token-dashboard](https://github.com/nateherkai/token-dashboard) | Local Claude Code JSONL dashboard with cost analytics, heatmaps, and tips | Deep Claude Code analytics | Clear dashboard story | Token Studio ROI keeps transcript content out of the product and focuses on project/task/output ROI. |
+| [Claude Code Usage Monitor](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor) | Real-time terminal monitoring with burn rate and prediction | Claude Code focused | Strong live monitoring | Token Studio ROI treats live monitoring as a lightweight guardrail and keeps weekly ROI review as the main surface. |
+| [TokenTracker](https://github.com/mm7894215/TokenTracker) | Local-first dashboard, native tray/menu bar, widgets, many coding tools | Very broad tool coverage | Desktop packaging and zero-config story | Token Studio ROI is lighter-weight today but has deeper work/output attribution and publishable review artifacts. |
 
 ## Differentiation
 
@@ -21,10 +21,12 @@ Token Studio ROI is positioned as a local AI coding ROI review system, not only 
 - ROI Advisor: local explainable rules that recommend annotation, model switching, context compression, stop-loss, output links, and policy changes.
 - Model Policy export: produces a reusable Markdown strategy for when to use light, mid, or heavy models.
 - Public safety: demo mode, privacy-check, `NOTICE.md`, no real SQLite in git, no prompt/response export.
+- Launch path: `git clone` demo today, `npx @ryan/token-studio-roi demo` after npm publication.
+- v4.1 coverage path: experimental Cursor, Copilot CLI, Qwen Code, Kimi, and Goose collectors skip records without explicit token fields.
 
 ## Remaining Gaps
 
-- Collector depth is behind the broadest multi-tool products. v4.0 has six stable sources and detected-only placeholders for several others.
-- Live monitoring is intentionally deferred; v4.1 should add a lightweight `/live` page only after collector correctness is stable.
+- Collector depth is still behind the broadest multi-tool products. v4.1 adds five experimental sources, but stable verification remains narrower than ccusage or TokenTracker.
+- Live monitoring is intentionally lightweight; it is a guardrail for current burn rate, not an exact subscription predictor.
 - Desktop packaging is not included. Keep the public story focused on local browser + CLI first.
 - Automatic attribution is rule-based and should always display provenance and confidence.

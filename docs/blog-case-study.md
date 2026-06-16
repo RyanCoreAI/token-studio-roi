@@ -15,12 +15,13 @@ Most token dashboards answer "how much did I use?" Token Studio ROI asks "what d
 - Official-price conversion only.
 - Unpriced models stay unpriced.
 - Demo mode uses synthetic data.
-- Detected-only sources are not treated as verified collectors.
+- Experimental collectors are opt-in and skip rows without explicit token fields.
 
 ## Engineering Highlights
 
 - Node.js `node:sqlite` local data store.
-- Collector registry with stable and detected-only source states.
+- Collector registry with stable, experimental, detected-only, and unsupported states.
+- Lightweight `/live` monitor for recent burn rate without transcript access.
 - Loopback-only local write APIs.
 - Privacy scanner for public readiness.
 - ROI Evidence Score for evidence completeness.
