@@ -1,0 +1,17 @@
+.git/
+.DS_Store
+*.log
+*.tgz
+
+node_modules/
+.npm-cache/
+dist/
+coverage/
+
+.env
+.env.*
+.claude/
+.codex/
+
+data/*
+!data/.gitkeep

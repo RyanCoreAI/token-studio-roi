@@ -1,0 +1,38 @@
+{
+  "name": "@ryan/token-studio-roi",
+  "version": "4.0.0",
+  "description": "Local AI coding ROI studio for private token, output, and model strategy review.",
+  "type": "module",
+  "bin": {
+    "token-studio": "src/cli.mjs"
+  },
+  "scripts": {
+    "start": "node src/cli.mjs start",
+    "demo": "node src/cli.mjs demo",
+    "collect": "node src/collect.mjs",
+    "doctor": "node src/cli.mjs doctor",
+    "privacy:check": "node src/cli.mjs privacy-check",
+    "closure:check": "node src/closure-check.mjs",
+    "closure:import": "node src/closure-import.mjs",
+    "pricing:update": "node src/update-pricing.mjs",
+    "dev": "node src/dev.mjs",
+    "dev:client": "vite --host 127.0.0.1 --port 5173",
+    "dev:server": "node src/server.mjs",
+    "build": "vite build",
+    "preview": "npm run build && node src/server.mjs",
+    "serve": "node src/server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "echarts": "^6.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.16"
+  }
+}
