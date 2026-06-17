@@ -53,10 +53,12 @@ CLI:
 ```bash
 node src/cli.mjs demo
 node src/cli.mjs start
+node src/cli.mjs open
 node src/cli.mjs live
 node src/cli.mjs collectors
 node src/cli.mjs collectors --audit --json
 node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
+node src/cli.mjs import-usage --help
 node src/cli.mjs budget list
 node src/cli.mjs report --period=week --format=markdown
 node src/cli.mjs doctor
@@ -68,10 +70,12 @@ Target npm entry after publishing:
 ```bash
 npx @ryan/token-studio-roi demo
 npx @ryan/token-studio-roi start
+npx @ryan/token-studio-roi open
 npx @ryan/token-studio-roi live
 npx @ryan/token-studio-roi collectors
 npx @ryan/token-studio-roi collectors --audit --json
 npx @ryan/token-studio-roi import-usage --format=ccusage-json --file ccusage.json --dry-run
+npx @ryan/token-studio-roi import-usage --help
 npx @ryan/token-studio-roi budget list
 npx @ryan/token-studio-roi report --period=week --format=markdown
 npx @ryan/token-studio-roi collect --sources=claude,codex
@@ -81,15 +85,17 @@ npx @ryan/token-studio-roi privacy-check
 
 `demo` uses synthetic data and does not scan real `.claude`, `.codex`, Cursor, or Copilot logs. `start` reads an existing SQLite database and does not collect automatically.
 
+See [docs/first-run.md](docs/first-run.md) for the first-run flow. The Dashboard also derives first-run guidance from the current database: no data points to demo/import, data without actions points to `/review`, and budgets without event-level live data explain the `/live` window behavior.
+
 ## Screenshots
 
 These screenshots are from demo mode or sanitized synthetic data, not real local logs.
 
-![Token Studio ROI dashboard](docs/assets/token-studio-v44-dashboard.png)
+![Token Studio ROI dashboard](docs/assets/token-studio-v45-dashboard.png)
 
-![Token Studio ROI review](docs/assets/token-studio-v44-review.png)
+![Token Studio ROI review](docs/assets/token-studio-v45-review.png)
 
-![Token Studio ROI live guardrails](docs/assets/token-studio-v44-live.png)
+![Token Studio ROI live guardrails](docs/assets/token-studio-v45-live.png)
 
 Real collection requires explicit confirmation:
 
@@ -119,6 +125,7 @@ Non-interactive shells refuse collection unless `--yes` is passed.
 - Terminal Report: `token-studio report --period=week --format=table|markdown|json` prints a quick ROI review summary.
 - Privacy check: scans for real DBs, AI log directories, `.env`, generated exports, personal paths, and likely secrets.
 - Demo mode: public demos use synthetic data and show a Demo Mode badge.
+- First-run onboarding: empty-data, import, budget, and review-action guidance without cloud sync or accounts.
 
 ## Why Not Just ccusage / CodeBurn?
 

@@ -20,15 +20,16 @@ git diff --check
 - Do not use real `data/usage.sqlite`.
 - Do not include real project paths, local usernames, exported reports, or private output URLs.
 - Current public screenshot assets:
-  - `docs/assets/token-studio-v44-dashboard.png`
-  - `docs/assets/token-studio-v44-review.png`
-  - `docs/assets/token-studio-v44-live.png`
-  - `docs/assets/token-studio-v44-review-mobile.png`
+  - `docs/assets/token-studio-v45-dashboard.png`
+  - `docs/assets/token-studio-v45-review.png`
+  - `docs/assets/token-studio-v45-live.png`
+  - `docs/assets/token-studio-v45-review-mobile.png`
 
 ## GitHub Release
 
 - Repository name: `token-studio-roi`.
-- Current RC tag target: `v4.4.0`.
+- Current public tag: `v4.4.0`.
+- Current local next version: `v4.5.0`.
 - Historical standalone baseline: `v4.0.0`.
 - Suggested topics: `ai-coding`, `token-usage`, `cost-tracking`, `local-first`, `privacy-first`, `roi`, `codex-cli`, `claude-code`.
 - Release notes should say cost is official public token-price conversion, not a provider invoice.

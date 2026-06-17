@@ -25,6 +25,7 @@ import {
   filterSessionsByDashboardFilters,
   sessionModel
 } from './model-usage.js';
+import { buildFirstRunState } from './onboarding.js';
 import './styles.css';
 
 function summarizeCollectOutput(stdout) {
@@ -575,6 +576,7 @@ function Dashboard({
   const unattributedSessions = useMemo(() =>
     buildPendingConfirmationSessions(filteredSessionsWithAutoSuggestions)
   , [filteredSessionsWithAutoSuggestions]);
+  const firstRunState = useMemo(() => buildFirstRunState(M), [M]);
 
   const filteredRuns = useMemo(() => {
     return M.runs.filter(r =>
@@ -730,6 +732,10 @@ function Dashboard({
             onClick={() => setFocusedSource(null)}>取消聚焦</button>
         </div>
       )}
+
+      <FirstRunPanel
+        state={firstRunState}
+        onOpenImportBudget={() => setImportBudgetOpen(true)} />
 
       {/* KPI row */}
       <div className="kpi-row">
@@ -888,6 +894,62 @@ function Dashboard({
           onClose={() => setImportBudgetOpen(false)} />
       )}
     </div>
+  );
+}
+
+function FirstRunPanel({ state, onOpenImportBudget }) {
+  if (!state?.shouldShow) return null;
+  const primaryNotice = state.notices[0] || null;
+
+  const runAction = (notice) => {
+    if (!notice) return;
+    if (notice.id === 'no-data') {
+      onOpenImportBudget();
+    } else if (notice.id === 'no-actions') {
+      window.location.href = '/review';
+    } else if (notice.id === 'budget-no-live-events') {
+      window.location.href = '/live';
+    }
+  };
+
+  return (
+    <section className="first-run-panel" aria-label="首次使用引导">
+      <div className="first-run-main">
+        <div>
+          <div className="eyebrow">首次使用</div>
+          <h2>{primaryNotice?.title || '5 分钟跑通 Token Studio ROI'}</h2>
+          <p>{primaryNotice?.detail || '按顺序准备数据、设置预算，再把 ROI 建议加入行动清单。'}</p>
+        </div>
+        <div className="first-run-actions">
+          {primaryNotice && (
+            <button className="btn btn-primary" onClick={() => runAction(primaryNotice)}>
+              {primaryNotice.action}
+            </button>
+          )}
+          <a className="btn" href="/review">打开 /review</a>
+          <a className="btn" href="/live">打开 /live</a>
+        </div>
+      </div>
+      <div className="first-run-steps">
+        {state.steps.map(step => (
+          <article key={step.id} className={`first-run-step ${step.status}`}>
+            <span>{step.status === 'done' ? 'Done' : 'Todo'}</span>
+            <strong>{step.title}</strong>
+            <p>{step.detail}</p>
+          </article>
+        ))}
+      </div>
+      {state.notices.length > 1 && (
+        <div className="first-run-notices">
+          {state.notices.slice(1).map(notice => (
+            <button key={notice.id} type="button" onClick={() => runAction(notice)}>
+              <strong>{notice.title}</strong>
+              <span>{notice.action}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

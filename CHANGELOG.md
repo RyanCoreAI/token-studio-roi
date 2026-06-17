@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.5.0
+
+- Added first-run onboarding on the Dashboard, derived from existing usage, budget, advisor action, and token event data without adding schema.
+- Added empty-state guidance for no data, data without Advisor actions, and budgets without recent event-level live data.
+- Added `token-studio open` to start the local UI and open the browser.
+- Added `token-studio import-usage --help` with ccusage JSON examples, supported shapes, and privacy boundaries.
+- Added `docs/first-run.md` with a 5-minute demo/import/budget/review flow.
+
 ## 4.4.0
 
 - Added a Dashboard “导入/预算” wizard for ccusage JSON paste/upload dry-run and explicit SQLite apply.

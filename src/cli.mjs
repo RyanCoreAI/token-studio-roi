@@ -20,6 +20,8 @@ const args = parseArgs(process.argv.slice(3));
 try {
   if (command === 'start') {
     await startCommand({ demo: false });
+  } else if (command === 'open') {
+    await startCommand({ demo: false, openBrowser: true });
   } else if (command === 'demo') {
     await demoCommand();
   } else if (command === 'live') {
@@ -55,7 +57,7 @@ async function demoCommand() {
   await startCommand({ demo: true, dbPath });
 }
 
-async function startCommand({ demo = false, dbPath = null, route = '/' } = {}) {
+async function startCommand({ demo = false, dbPath = null, route = '/', openBrowser = false } = {}) {
   const apiPort = Number(args.apiPort || args.port || await freePort(4173));
   const uiPort = Number(args.uiPort || await freePort(5173));
   const env = {
@@ -81,8 +83,12 @@ async function startCommand({ demo = false, dbPath = null, route = '/' } = {}) {
     stdio: 'inherit',
     windowsHide: true
   });
-  console.log(`[token-studio] UI  http://127.0.0.1:${uiPort}${route}${demo ? '  (Demo Mode)' : ''}`);
+  const uiUrl = `http://127.0.0.1:${uiPort}${route}`;
+  console.log(`[token-studio] UI  ${uiUrl}${demo ? '  (Demo Mode)' : ''}`);
   console.log(`[token-studio] API http://127.0.0.1:${apiPort}`);
+  if (openBrowser) {
+    setTimeout(() => openUrl(uiUrl), 900).unref?.();
+  }
   await waitForChildren([server, client]);
 }
 
@@ -157,6 +163,10 @@ async function collectorsCommand() {
 }
 
 async function importUsageCommand() {
+  if (args.help) {
+    printImportUsageHelp();
+    return;
+  }
   if (args.format !== 'ccusage-json') {
     throw new Error('import-usage currently supports --format=ccusage-json only.');
   }
@@ -328,6 +338,27 @@ function childExitCode(child) {
   });
 }
 
+function openUrl(url) {
+  let launcher;
+  let launcherArgs;
+  if (process.platform === 'win32') {
+    launcher = 'cmd';
+    launcherArgs = ['/c', 'start', '""', url];
+  } else if (process.platform === 'darwin') {
+    launcher = 'open';
+    launcherArgs = [url];
+  } else {
+    launcher = 'xdg-open';
+    launcherArgs = [url];
+  }
+  const child = spawn(launcher, launcherArgs, {
+    stdio: 'ignore',
+    detached: true,
+    windowsHide: true
+  });
+  child.unref();
+}
+
 function parseArgs(argv) {
   const parsed = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
@@ -362,6 +393,7 @@ function printHelp() {
     'Commands:',
     '  token-studio demo [--seed-only] [--db data/demo.sqlite]',
     '  token-studio start [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
+    '  token-studio open [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
     '  token-studio live [--db data/usage.sqlite]',
     '  token-studio collectors [--json]',
     '  token-studio collectors --audit [--json]',
@@ -371,5 +403,24 @@ function printHelp() {
     '  token-studio collect --sources claude,codex [--yes]',
     '  token-studio doctor',
     '  token-studio privacy-check [--include-untracked]'
+  ].join('\n'));
+}
+
+function printImportUsageHelp() {
+  console.log([
+    'Token Studio ccusage JSON Import',
+    '',
+    'Default mode is dry-run. It validates shape and counts rows without writing SQLite.',
+    '',
+    'Examples:',
+    '  token-studio import-usage --format=ccusage-json --file ccusage.json --dry-run',
+    '  token-studio import-usage --format=ccusage-json --file ccusage.json --apply',
+    '  ccusage daily --json | token-studio import-usage --format=ccusage-json --file - --dry-run',
+    '',
+    'Supported shapes:',
+    '  daily, project daily, session, blocks, monthly',
+    '',
+    'Privacy:',
+    '  prompt, response, messages, transcript, diff, content, and text fields are rejected.'
   ].join('\n'));
 }

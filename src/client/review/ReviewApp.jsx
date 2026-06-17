@@ -401,6 +401,14 @@ function ReviewDashboard({ rawData }) {
         </div>
       </nav>
 
+      <ReviewPageControls
+        pages={reviewPages}
+        activeIndex={activePageIndex}
+        onPrevious={() => goToReviewPage(activePageIndex - 1)}
+        onNext={() => goToReviewPage(activePageIndex + 1)}
+        onJump={goToReviewPage}
+      />
+
       {reviewPages.map((page, index) => {
         const content = page.innerClassName
           ? <div className={page.innerClassName}>{page.content}</div>
@@ -416,14 +424,6 @@ function ReviewDashboard({ rawData }) {
           </div>
         );
       })}
-
-      <ReviewPageControls
-        pages={reviewPages}
-        activeIndex={activePageIndex}
-        onPrevious={() => goToReviewPage(activePageIndex - 1)}
-        onNext={() => goToReviewPage(activePageIndex + 1)}
-        onJump={goToReviewPage}
-      />
 
       <footer className="review-footer">
         <div className="review-footer-inner">

@@ -103,6 +103,16 @@ export function LiveApp() {
         </section>
       )}
 
+      {snapshot?.budgetWindows?.length > 0 && Number(totals.totalTokens || 0) === 0 && (
+        <section className="live-first-run-note" aria-label="预算窗口说明">
+          <strong>预算窗口已配置，但最近窗口没有事件级 token 数据。</strong>
+          <span>
+            `/live` 只读取最近 {snapshot?.windowMinutes || 15} 分钟的 token_events。
+            如果当前库只有 daily/session 聚合数据，预算配置仍会保留，但实时 burn rate 和窗口消耗会显示为空。
+          </span>
+        </section>
+      )}
+
       <section className="live-grid">
         <MetricCard label="最近 Token" value={formatNumber(totals.totalTokens)} />
         <MetricCard label="Burn Rate / hour" value={formatNumber(totals.burnRateTokensPerHour)} />

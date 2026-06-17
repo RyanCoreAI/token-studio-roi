@@ -46,6 +46,14 @@ html, body {
 }
 
 html {
+  overflow-x: clip;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+html {
   scroll-behavior: smooth;
 }
 
@@ -2249,22 +2257,34 @@ section.story:last-of-type  { padding-bottom: 56px; }
     min-height: calc(100vh - 80px);
   }
   .review-page-controls {
-    left: 12px;
-    right: 12px;
-    top: auto;
-    bottom: 12px;
+    left: auto;
+    right: auto;
+    top: 104px;
+    bottom: auto;
+    position: sticky;
     transform: none;
-    width: auto;
-    grid-template-columns: auto minmax(68px, 1fr) auto;
+    width: min(339px, calc(100vw - 36px));
+    max-width: min(339px, calc(100vw - 36px));
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    margin: 12px 18px;
+  }
+  .review-page-btn {
+    order: 1;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
   .review-page-dots {
     grid-column: 1 / -1;
     justify-content: center;
-    order: 4;
+    order: 3;
     padding: 2px 0 0;
   }
   .review-page-current {
     min-width: 0;
+    grid-column: 1 / -1;
+    order: 2;
   }
   .review-page-current span {
     max-width: 120px;

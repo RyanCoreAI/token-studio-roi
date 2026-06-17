@@ -51,10 +51,12 @@ npm run demo
 ```bash
 node src/cli.mjs demo
 node src/cli.mjs start
+node src/cli.mjs open
 node src/cli.mjs live
 node src/cli.mjs collectors
 node src/cli.mjs collectors --audit --json
 node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
+node src/cli.mjs import-usage --help
 node src/cli.mjs budget list
 node src/cli.mjs report --period=week --format=markdown
 node src/cli.mjs doctor
@@ -66,10 +68,12 @@ node src/cli.mjs privacy-check
 ```bash
 npx @ryan/token-studio-roi demo
 npx @ryan/token-studio-roi start
+npx @ryan/token-studio-roi open
 npx @ryan/token-studio-roi live
 npx @ryan/token-studio-roi collectors
 npx @ryan/token-studio-roi collectors --audit --json
 npx @ryan/token-studio-roi import-usage --format=ccusage-json --file ccusage.json --dry-run
+npx @ryan/token-studio-roi import-usage --help
 npx @ryan/token-studio-roi budget list
 npx @ryan/token-studio-roi report --period=week --format=markdown
 npx @ryan/token-studio-roi collect --sources=claude,codex
@@ -79,15 +83,17 @@ npx @ryan/token-studio-roi privacy-check
 
 `demo` 使用合成数据，不扫描真实 `.claude`、`.codex`、Cursor 或 Copilot 日志。`start` 只读取已有 SQLite，不自动采集。
 
+首次使用流程见 [docs/first-run.md](docs/first-run.md)。Dashboard 也会根据当前数据状态显示“首次使用”引导：无数据时提示 demo/import，有数据但无 action 时提示去 `/review`，有预算但无事件级 live 数据时解释 `/live` 的窗口口径。
+
 ## Screenshots
 
 这些截图来自 demo mode 或脱敏合成数据，不包含真实本机日志。
 
-![Token Studio ROI dashboard](docs/assets/token-studio-v44-dashboard.png)
+![Token Studio ROI dashboard](docs/assets/token-studio-v45-dashboard.png)
 
-![Token Studio ROI review](docs/assets/token-studio-v44-review.png)
+![Token Studio ROI review](docs/assets/token-studio-v45-review.png)
 
-![Token Studio ROI live guardrails](docs/assets/token-studio-v44-live.png)
+![Token Studio ROI live guardrails](docs/assets/token-studio-v45-live.png)
 
 真实采集需要显式确认：
 
@@ -117,6 +123,7 @@ node src/cli.mjs collect --sources=claude,codex
 - Terminal Report：`token-studio report --period=week --format=table|markdown|json` 快速查看 ROI 复盘摘要。
 - Privacy check：公开前扫描真实 DB、AI 日志目录、`.env`、导出文件和个人路径。
 - Demo mode：公开演示默认使用合成数据并显示 Demo Mode 标识。
+- First-run onboarding：空数据、导入、预算、复盘 action 的首次使用引导，不新增云同步或账号。
 
 ## Why Not Just ccusage / CodeBurn?
 
