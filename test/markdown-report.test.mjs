@@ -23,9 +23,31 @@ test('buildMarkdownReviewReport renders the fixed weekly review structure', () =
 
   assert.match(report, /^# Token Studio Weekly Review/);
   assert.match(report, /## 1\. 本期总览/);
-  assert.match(report, /## 8\. 口径说明/);
+  assert.match(report, /## 8\. 本周行动状态/);
+  assert.match(report, /## 10\. 口径说明/);
+  assert.match(report, /## 6\. 节省模拟/);
   assert.match(report, /官方公开 token 单价换算，不是供应商账单/);
   assert.match(report, /不读取、不导出对话正文/);
+});
+
+test('buildMarkdownReviewReport includes advisor action workflow status', () => {
+  const report = buildMarkdownReviewReport({
+    period,
+    daily: [],
+    sessions: [],
+    advisorActions: [{
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-12',
+      status: 'done',
+      category: '节省模拟',
+      title: '测试验证改用轻量模型',
+      action: '下周测试验证默认先用轻量模型',
+      sourceRule: 'savings:test'
+    }]
+  });
+
+  assert.match(report, /已完成 \| 节省模拟 \| 测试验证改用轻量模型 \| 下周测试验证默认先用轻量模型/);
+  assert.match(report, /不证明真实因果节省/);
 });
 
 test('buildMarkdownReviewReport includes unattributed work and advisor actions', () => {

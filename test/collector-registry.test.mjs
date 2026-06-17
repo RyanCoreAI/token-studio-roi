@@ -41,3 +41,16 @@ test('collectable collectors include experimental modules only when requested', 
   assert.equal(collectableCollectors().some(item => item.id === 'cursor'), false);
   assert.equal(collectableCollectors({ includeExperimental: true }).some(item => item.id === 'cursor'), true);
 });
+
+test('collector matrix includes import-only and detected-only entries without collect modules', () => {
+  const rows = detectCollectors();
+  const ccusage = rows.find(item => item.id === 'ccusage');
+  const amp = rows.find(item => item.id === 'amp');
+  const roo = rows.find(item => item.id === 'roo-code');
+  assert.equal(ccusage.supportStatus, 'import-only');
+  assert.equal(ccusage.module, null);
+  assert.equal(ccusage.readsConversationContent, false);
+  assert.equal(amp.supportStatus, 'detected-only');
+  assert.equal(roo.tokenReliability, 'unknown-no-usage-import');
+  assert.equal(collectableCollectors({ includeExperimental: true }).some(item => item.id === 'ccusage'), false);
+});

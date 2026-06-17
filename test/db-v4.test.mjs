@@ -4,10 +4,16 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  deleteAdvisorAction,
+  deleteBudgetProfile,
+  listAdvisorActions,
+  listBudgetProfiles,
   linkWorkItemSessions,
   listTokenEvents,
   listWorkItems,
   openDb,
+  upsertAdvisorAction,
+  upsertBudgetProfile,
   upsertSession,
   upsertTokenEvent,
   upsertWorkItem
@@ -78,5 +84,56 @@ test('work items can be created and linked to sessions', () => {
   const items = listWorkItems(db);
   assert.equal(items.length, 1);
   assert.equal(items[0].sessions.length, 1);
+  db.close();
+});
+
+test('budget profiles validate custom local budgets', () => {
+  const db = tempDb();
+  const profile = upsertBudgetProfile(db, {
+    source: 'claude',
+    label: 'Claude 5h',
+    windowMinutes: 300,
+    tokenBudget: 500000
+  });
+  assert.equal(profile.source, 'claude');
+  assert.equal(profile.enabled, true);
+  assert.equal(listBudgetProfiles(db).length, 1);
+  assert.throws(() => upsertBudgetProfile(db, {
+    source: 'codex',
+    label: 'invalid',
+    windowMinutes: 0,
+    tokenBudget: 100
+  }), /windowMinutes/);
+  assert.equal(deleteBudgetProfile(db, { id: profile.id }), 1);
+  db.close();
+});
+
+test('advisor actions upsert by period and source rule', () => {
+  const db = tempDb();
+  const first = upsertAdvisorAction(db, {
+    periodStart: '2026-06-01',
+    periodEnd: '2026-06-07',
+    category: '节省模拟',
+    title: '测试验证换轻量模型',
+    action: '下周测试验证默认先用轻量模型',
+    evidence: '2 sessions',
+    sourceRule: 'savings:test',
+    status: 'open'
+  });
+  const updated = upsertAdvisorAction(db, {
+    periodStart: '2026-06-01',
+    periodEnd: '2026-06-07',
+    category: '节省模拟',
+    title: '测试验证换轻量模型',
+    action: '下周测试验证默认先用轻量模型',
+    evidence: '2 sessions',
+    sourceRule: 'savings:test',
+    status: 'done'
+  });
+  assert.equal(updated.id, first.id);
+  assert.equal(updated.status, 'done');
+  assert.ok(updated.completedAt);
+  assert.equal(listAdvisorActions(db, { periodStart: '2026-06-01', periodEnd: '2026-06-07' }).length, 1);
+  assert.equal(deleteAdvisorAction(db, { id: updated.id }), 1);
   db.close();
 });

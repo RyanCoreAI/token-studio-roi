@@ -13,6 +13,8 @@ import {
 } from './auto-attribution.mjs';
 import {
   ANNOTATION_SOURCES,
+  ADVISOR_ACTION_STATUSES,
+  BUDGET_WINDOW_TYPES,
   DEFAULT_SESSION_ANNOTATION,
   OUTPUT_STATUSES,
   OUTPUT_TYPES,
@@ -25,12 +27,16 @@ import {
   batchUpsertSessionAnnotations,
   defaultDbPath,
   deleteProjectAliasRule,
+  deleteAdvisorAction,
+  deleteBudgetProfile,
   deleteSessionAnnotation,
   deleteSessionOutput,
   exportAnnotationData,
   importAnnotationData,
   linkWorkItemSessions,
   listProjectAliasRules,
+  listAdvisorActions,
+  listBudgetProfiles,
   listTokenEvents,
   listWorkItems,
   matchProjectAliasRule,
@@ -38,6 +44,8 @@ import {
   recordRun,
   deleteWorkItem,
   undoAutoSessionAnnotations,
+  upsertAdvisorAction,
+  upsertBudgetProfile,
   upsertDaily,
   upsertProjectAliasRule,
   upsertSession,
@@ -50,6 +58,7 @@ import { detectCollectors } from './collector-registry.mjs';
 import { runPrivacyCheck } from './privacy-check.mjs';
 import { buildModelPolicy, formatModelPolicyMarkdown } from './model-policy.mjs';
 import { buildLiveSnapshot } from './live.mjs';
+import { applyCcusageImport, parseCcusageJsonText, planCcusageImport } from './ccusage-import.mjs';
 
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || process.env.BIND_HOST || '127.0.0.1';
@@ -275,6 +284,8 @@ function handleApi(req, url, res) {
         workStages: WORK_STAGES,
         valueLevels: VALUE_LEVELS,
         annotationSources: ANNOTATION_SOURCES,
+        budgetWindowTypes: BUDGET_WINDOW_TYPES,
+        advisorActionStatuses: ADVISOR_ACTION_STATUSES,
         outputTypes: OUTPUT_TYPES,
         projectAliasMatchTypes: PROJECT_ALIAS_MATCH_TYPES,
         projectAliasRules: aliasRules,
@@ -284,6 +295,8 @@ function handleApi(req, url, res) {
       daily,
       sessions: pricedSessions,
       workItems: listWorkItems(db),
+      budgetProfiles: listBudgetProfiles(db),
+      advisorActions: listAdvisorActions(db),
       tokenEvents: listTokenEvents(db, { limit: 1000 }),
       // Normalize runs: strip newlines from messages, shorten device names
       runs: rawRuns.map(r => ({
@@ -298,11 +311,44 @@ function handleApi(req, url, res) {
     sendJson(res, { collectors: detectCollectors() });
     return;
   }
+  if (url.pathname === '/api/budget-profiles' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '预算配置接口')) return;
+    sendJson(res, { profiles: listBudgetProfiles(db), windowTypes: BUDGET_WINDOW_TYPES });
+    return;
+  }
+  if (url.pathname === '/api/budget-profiles' && req.method === 'POST') {
+    handleBudgetProfileUpsert(req, res);
+    return;
+  }
+  if (url.pathname === '/api/budget-profiles' && req.method === 'DELETE') {
+    handleBudgetProfileDelete(req, url, res);
+    return;
+  }
+  if (url.pathname === '/api/advisor-actions' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '建议行动接口')) return;
+    sendJson(res, {
+      actions: listAdvisorActions(db, {
+        periodStart: url.searchParams.get('periodStart'),
+        periodEnd: url.searchParams.get('periodEnd')
+      }),
+      statuses: ADVISOR_ACTION_STATUSES
+    });
+    return;
+  }
+  if (url.pathname === '/api/advisor-actions' && req.method === 'POST') {
+    handleAdvisorActionUpsert(req, res);
+    return;
+  }
+  if (url.pathname.startsWith('/api/advisor-actions/') && req.method === 'DELETE') {
+    handleAdvisorActionDelete(req, url, res);
+    return;
+  }
   if (url.pathname === '/api/live' && req.method === 'GET') {
     if (!validateLocalRead(req, res, '实时监控接口')) return;
     sendJson(res, buildLiveSnapshot({
       sessions: liveSessions(),
       tokenEvents: liveTokenEvents(),
+      budgetProfiles: listBudgetProfiles(db).filter(profile => profile.enabled),
       runs: all(`
         SELECT device, source, status, message, collected_at AS collectedAt
         FROM collection_runs
@@ -396,6 +442,10 @@ function handleApi(req, url, res) {
     handleImportAnnotations(req, res);
     return;
   }
+  if (url.pathname === '/api/import/ccusage-json' && req.method === 'POST') {
+    handleImportCcusageJson(req, res);
+    return;
+  }
   if (url.pathname === '/api/ingest' && req.method === 'POST') {
     handleIngest(req, res);
     return;
@@ -417,6 +467,54 @@ async function handleProjectAliasRuleUpsert(req, res) {
   try {
     const rule = upsertProjectAliasRule(db, await readJson(req, 64 * 1024));
     sendJson(res, { ok: true, rule: { ...rule, enabled: Boolean(rule.enabled) } });
+  } catch (error) {
+    sendJson(res, { error: error.message }, 400);
+  }
+}
+
+async function handleBudgetProfileUpsert(req, res) {
+  if (!validateLocalJsonWrite(req, res, '预算配置接口')) return;
+
+  try {
+    const profile = upsertBudgetProfile(db, await readJson(req, 64 * 1024));
+    sendJson(res, { ok: true, profile });
+  } catch (error) {
+    sendJson(res, { error: error.message }, 400);
+  }
+}
+
+async function handleBudgetProfileDelete(req, url, res) {
+  if (!validateLocalJsonWrite(req, res, '预算配置接口')) return;
+
+  try {
+    const payload = req.headers['content-length'] === '0'
+      ? Object.fromEntries(url.searchParams.entries())
+      : { ...Object.fromEntries(url.searchParams.entries()), ...await readJson(req, 64 * 1024) };
+    const deleted = deleteBudgetProfile(db, payload);
+    sendJson(res, { ok: true, deleted });
+  } catch (error) {
+    sendJson(res, { error: error.message }, 400);
+  }
+}
+
+async function handleAdvisorActionUpsert(req, res) {
+  if (!validateLocalJsonWrite(req, res, '建议行动接口')) return;
+
+  try {
+    const action = upsertAdvisorAction(db, await readJson(req, 128 * 1024));
+    sendJson(res, { ok: true, action });
+  } catch (error) {
+    sendJson(res, { error: error.message }, 400);
+  }
+}
+
+async function handleAdvisorActionDelete(req, url, res) {
+  if (!validateLocalJsonWrite(req, res, '建议行动接口')) return;
+
+  try {
+    const id = url.pathname.split('/').pop();
+    const deleted = deleteAdvisorAction(db, { id });
+    sendJson(res, { ok: true, deleted });
   } catch (error) {
     sendJson(res, { error: error.message }, 400);
   }
@@ -603,6 +701,38 @@ async function handleImportAnnotations(req, res) {
   try {
     const result = importAnnotationData(db, await readJson(req, 5 * 1024 * 1024));
     sendJson(res, { ok: true, imported: result });
+  } catch (error) {
+    sendJson(res, { error: error.message }, 400);
+  }
+}
+
+async function handleImportCcusageJson(req, res) {
+  if (!validateLocalJsonWrite(req, res, 'ccusage 导入接口')) return;
+
+  try {
+    const body = await readJson(req, 8 * 1024 * 1024);
+    const input = body.payload != null
+      ? parseCcusageJsonText(JSON.stringify(body.payload))
+      : parseCcusageJsonText(body.text || body.json || '');
+    const plan = planCcusageImport(input, {
+      device: body.device || process.env.COLLECT_DEVICE || 'imported'
+    });
+    const summary = {
+      ok: true,
+      mode: body.apply ? 'apply' : 'dry-run',
+      detectedShape: plan.detectedShape,
+      daily: plan.daily.length,
+      sessions: plan.sessions.length,
+      tokenEvents: plan.tokenEvents.length,
+      warnings: plan.warnings,
+      run: plan.run
+    };
+    if (body.apply) {
+      const backup = createDbBackup({ reason: 'ccusage-import' });
+      summary.applied = applyCcusageImport(db, plan);
+      summary.backup = backup;
+    }
+    sendJson(res, summary);
   } catch (error) {
     sendJson(res, { error: error.message }, 400);
   }

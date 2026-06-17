@@ -6,9 +6,13 @@ import { stdin as input, stdout as output } from 'node:process';
 import { createServer } from 'node:net';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { hostname } from 'node:os';
 import { seedDemoDatabase } from './demo-seed.mjs';
-import { detectCollectors } from './collector-registry.mjs';
+import { auditExperimentalCollectors, detectCollectors } from './collector-registry.mjs';
+import { applyCcusageImport, parseCcusageJsonText, planCcusageImport, readCcusageImportInput } from './ccusage-import.mjs';
+import { defaultDbPath, deleteBudgetProfile, listBudgetProfiles, openDb, upsertBudgetProfile } from './db.mjs';
 import { formatPrivacyCheckReport, runPrivacyCheck } from './privacy-check.mjs';
+import { buildTerminalReport, formatTerminalReport } from './terminal-report.mjs';
 
 const command = process.argv[2] || 'help';
 const args = parseArgs(process.argv.slice(3));
@@ -24,6 +28,12 @@ try {
     await collectCommand();
   } else if (command === 'collectors') {
     await collectorsCommand();
+  } else if (command === 'import-usage') {
+    await importUsageCommand();
+  } else if (command === 'budget') {
+    await budgetCommand();
+  } else if (command === 'report') {
+    await reportCommand();
   } else if (command === 'doctor') {
     await doctorCommand();
   } else if (command === 'privacy-check') {
@@ -114,6 +124,22 @@ async function doctorCommand() {
 }
 
 async function collectorsCommand() {
+  if (args.audit) {
+    const audit = await auditExperimentalCollectors();
+    if (args.json) {
+      console.log(JSON.stringify(audit, null, 2));
+      return;
+    }
+    console.log('Token Studio Collector Audit');
+    console.log(`auditedAt=${audit.auditedAt}`);
+    console.log(`totals: files=${audit.totals.candidateFiles}, usable=${audit.totals.usableTokenRecords}, noToken=${audit.totals.skippedNoTokenRecords}, unsafe=${audit.totals.skippedConversationLikeRecords}, oversized=${audit.totals.skippedOversizedFiles}, parseErrors=${audit.totals.parseErrors}`);
+    for (const item of audit.collectors) {
+      const s = item.summary;
+      console.log(`- ${item.id}: detected=${item.detected ? 'yes' : 'no'}, files=${s.candidateFiles}, usable=${s.usableTokenRecords}, noToken=${s.skippedNoTokenRecords}, unsafe=${s.skippedConversationLikeRecords}, oversized=${s.skippedOversizedFiles}, parseErrors=${s.parseErrors}`);
+    }
+    return;
+  }
+
   const collectors = detectCollectors();
   if (args.json) {
     console.log(JSON.stringify({ collectors }, null, 2));
@@ -127,6 +153,108 @@ async function collectorsCommand() {
     console.log(`  privacy=${item.privacyLevel}, readsConversationContent=${item.readsConversationContent ? 'yes' : 'no'}, tokenReliability=${item.tokenReliability}`);
     console.log(`  fields=${item.dataFields.join(',') || 'none'}`);
     if (item.note) console.log(`  note=${item.note}`);
+  }
+}
+
+async function importUsageCommand() {
+  if (args.format !== 'ccusage-json') {
+    throw new Error('import-usage currently supports --format=ccusage-json only.');
+  }
+  if (!args.file) {
+    throw new Error('import-usage requires --file <path|->.');
+  }
+  if (args.apply && args.dryRun) {
+    throw new Error('Choose either --apply or --dry-run, not both.');
+  }
+  const payload = parseCcusageJsonText(readCcusageImportInput(args.file));
+  const plan = planCcusageImport(payload, {
+    device: args.device || hostname()
+  });
+  const summary = {
+    ok: true,
+    mode: args.apply ? 'apply' : 'dry-run',
+    detectedShape: plan.detectedShape,
+    daily: plan.daily.length,
+    sessions: plan.sessions.length,
+    tokenEvents: plan.tokenEvents.length,
+    warnings: plan.warnings
+  };
+
+  if (args.apply) {
+    const db = openCliDb();
+    try {
+      summary.applied = applyCcusageImport(db, plan);
+    } finally {
+      db.close();
+    }
+  }
+
+  if (args.json) {
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+  console.log(`ccusage ${summary.mode}: shape=${summary.detectedShape}, daily=${summary.daily}, sessions=${summary.sessions}, token_events=${summary.tokenEvents}`);
+  for (const warning of summary.warnings.slice(0, 5)) {
+    console.log(`warning: ${warning.model || 'unknown'} — ${warning.reason}`);
+  }
+}
+
+async function budgetCommand() {
+  const action = args._[0] || 'list';
+  const db = openCliDb();
+  try {
+    if (action === 'list') {
+      const profiles = listBudgetProfiles(db);
+      if (args.json) {
+        console.log(JSON.stringify({ profiles }, null, 2));
+        return;
+      }
+      console.log('Token Studio Budget Profiles');
+      if (!profiles.length) {
+        console.log('- none');
+        return;
+      }
+      for (const profile of profiles) {
+        console.log(`- #${profile.id} ${profile.label}: source=${profile.source || '*'}, window=${profile.windowMinutes}m, tokenBudget=${profile.tokenBudget || '-'}, costBudgetUSD=${profile.costBudgetUSD || '-'}, enabled=${profile.enabled ? 'yes' : 'no'}`);
+      }
+      return;
+    }
+    if (action === 'set') {
+      const profile = upsertBudgetProfile(db, {
+        id: args.id,
+        source: args.source || '',
+        label: args.label,
+        windowType: args.windowType || 'rolling',
+        windowMinutes: args.windowMinutes,
+        tokenBudget: args.tokenBudget || 0,
+        costBudgetUSD: args.costBudgetUsd ?? args.costBudgetUSD ?? 0,
+        enabled: args.enabled ?? true
+      });
+      console.log(args.json ? JSON.stringify({ ok: true, profile }, null, 2) : `saved budget #${profile.id}: ${profile.label}`);
+      return;
+    }
+    if (action === 'delete') {
+      const deleted = deleteBudgetProfile(db, { id: args.id });
+      console.log(args.json ? JSON.stringify({ ok: true, deleted }, null, 2) : `deleted=${deleted}`);
+      return;
+    }
+    throw new Error('Unknown budget command. Use budget list, budget set, or budget delete.');
+  } finally {
+    db.close();
+  }
+}
+
+async function reportCommand() {
+  const format = args.format || 'table';
+  if (!['table', 'markdown', 'json'].includes(format)) {
+    throw new Error('report --format must be table, markdown, or json.');
+  }
+  const db = openCliDb();
+  try {
+    const report = buildTerminalReport(db, { period: args.period || 'week' });
+    console.log(formatTerminalReport(report, format));
+  } finally {
+    db.close();
   }
 }
 
@@ -155,6 +283,10 @@ async function freePort(start) {
     if (await canListen(port)) return port;
   }
   throw new Error(`No free port found near ${start}`);
+}
+
+function openCliDb() {
+  return openDb(resolve(process.cwd(), args.db || process.env.DB_PATH || defaultDbPath));
 }
 
 function canListen(port) {
@@ -197,7 +329,7 @@ function childExitCode(child) {
 }
 
 function parseArgs(argv) {
-  const parsed = {};
+  const parsed = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg.startsWith('--') && arg.includes('=')) {
@@ -212,6 +344,8 @@ function parseArgs(argv) {
         parsed[key] = next;
         i += 1;
       }
+    } else {
+      parsed._.push(arg);
     }
   }
   return parsed;
@@ -230,6 +364,10 @@ function printHelp() {
     '  token-studio start [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
     '  token-studio live [--db data/usage.sqlite]',
     '  token-studio collectors [--json]',
+    '  token-studio collectors --audit [--json]',
+    '  token-studio import-usage --format=ccusage-json --file <path|-> [--dry-run|--apply]',
+    '  token-studio budget list|set|delete',
+    '  token-studio report --period=week --format=table|markdown|json',
     '  token-studio collect --sources claude,codex [--yes]',
     '  token-studio doctor',
     '  token-studio privacy-check [--include-untracked]'

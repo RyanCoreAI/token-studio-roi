@@ -353,7 +353,7 @@ function ratesForCalculation(rates, provider, cacheWriteMode) {
   };
 }
 
-function normalizeAnthropicCacheWriteTtl(value = process.env.ANTHROPIC_CACHE_WRITE_TTL) {
+function normalizeAnthropicCacheWriteTtl(value = globalThis.process?.env?.ANTHROPIC_CACHE_WRITE_TTL) {
   const normalized = String(value || DEFAULT_ANTHROPIC_CACHE_WRITE_TTL).trim().toLowerCase();
   return normalized === '1h' || normalized === 'hour' || normalized === '3600' ? '1h' : '5m';
 }

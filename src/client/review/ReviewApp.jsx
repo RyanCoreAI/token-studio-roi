@@ -6,12 +6,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { U } from '../shared/utils.js';
 import { RU } from './utils.js';
 import { HeroSection, ProjectSection, CalendarSection } from './sections-1.jsx';
-import { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, RoiAdvisorSection, ModelStrategySection, InsightsSection } from './sections-2.jsx';
+import { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection } from './sections-2.jsx';
 import { buildRoiAdvisor } from './roi-advisor.js';
 import { buildMarkdownReviewReport, buildReviewReportFilename } from './markdown-report.js';
 import { buildModelStrategy } from './model-strategy.js';
 import { buildReviewClosureProgress } from './closure-progress.js';
 import { buildRoiEvidence } from './roi-evidence.js';
+import { buildSavingsSimulation } from './savings-simulator.js';
 import './styles.css';
 
 export function ReviewApp() {
@@ -69,6 +70,7 @@ function ReviewDashboard({ rawData }) {
 
   const [periodId, setPeriodId] = useState('month');
   const [activePageIndex, setActivePageIndex] = useState(0);
+  const [advisorActions, setAdvisorActions] = useState(rawData.advisorActions || []);
   const pageRefs = useRef([]);
   const period = useMemo(() => RU.getPeriod(periodId, TODAY, rawData.daily), [periodId, rawData.daily]);
   const prevPeriod = useMemo(() => period.prev
@@ -144,9 +146,60 @@ function ReviewDashboard({ rawData }) {
   const roiEvidence = useMemo(() =>
     buildRoiEvidence({ sessions, workItems: rawData.workItems || [] })
   , [sessions, rawData.workItems]);
+  const savingsSimulation = useMemo(() =>
+    buildSavingsSimulation({ sessions, daily, pricingMeta: rawData.meta?.officialPricing || null })
+  , [sessions, daily, rawData.meta]);
   const markdownReport = useMemo(() =>
-    buildMarkdownReviewReport({ period, daily, sessions, workItems: rawData.workItems || [], roiAdvice, insights })
-  , [period, daily, sessions, rawData.workItems, roiAdvice, insights]);
+    buildMarkdownReviewReport({ period, daily, sessions, workItems: rawData.workItems || [], roiAdvice, insights, savingsSimulation, advisorActions })
+  , [period, daily, sessions, rawData.workItems, roiAdvice, insights, savingsSimulation, advisorActions]);
+
+  useEffect(() => {
+    setAdvisorActions(rawData.advisorActions || []);
+  }, [rawData.advisorActions]);
+
+  const actionsByRule = useMemo(() => {
+    const map = new Map();
+    for (const action of advisorActions) {
+      if (action.periodStart === period.start && action.periodEnd === period.end && action.sourceRule) {
+        map.set(action.sourceRule, action);
+      }
+    }
+    return map;
+  }, [advisorActions, period]);
+  const periodAdvisorActions = useMemo(() =>
+    advisorActions.filter(action => action.periodStart === period.start && action.periodEnd === period.end)
+  , [advisorActions, period]);
+
+  const persistAdvisorAction = useCallback(async (payload) => {
+    const response = await fetch('/api/advisor-actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        periodStart: period.start,
+        periodEnd: period.end,
+        ...payload
+      })
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    setAdvisorActions(current => {
+      const next = current.filter(item => item.id !== data.action.id);
+      next.unshift(data.action);
+      return next;
+    });
+    return data.action;
+  }, [period]);
+
+  const addAdvisorAction = useCallback((payload) =>
+    persistAdvisorAction({ ...payload, status: 'open' })
+  , [persistAdvisorAction]);
+
+  const setAdvisorActionStatus = useCallback((action, status) =>
+    persistAdvisorAction({ ...action, status })
+  , [persistAdvisorAction]);
 
   // Period nav
   const ORDER = ['week', 'month', 'prev', '90d', 'all'];
@@ -225,10 +278,36 @@ function ReviewDashboard({ rawData }) {
       content: <EfficiencySection daily={daily} period={period}/>
     },
     {
+      id: 'savings',
+      label: '节省模拟',
+      className: 'page',
+      content: <SavingsSimulatorSection
+        simulation={savingsSimulation}
+        actionsByRule={actionsByRule}
+        onAddAction={addAdvisorAction}
+        onSetActionStatus={setAdvisorActionStatus}
+      />
+    },
+    {
       id: 'advisor',
       label: 'ROI 建议',
       className: 'page',
-      content: <RoiAdvisorSection suggestions={roiAdvice}/>
+      content: <RoiAdvisorSection
+        suggestions={roiAdvice}
+        actionsByRule={actionsByRule}
+        onAddAction={addAdvisorAction}
+        onSetActionStatus={setAdvisorActionStatus}
+      />
+    },
+    {
+      id: 'actions',
+      label: '行动清单',
+      className: 'page',
+      content: <AdvisorActionSummarySection
+        actions={periodAdvisorActions}
+        period={period}
+        onSetActionStatus={setAdvisorActionStatus}
+      />
     },
     {
       id: 'strategy',
@@ -242,7 +321,7 @@ function ReviewDashboard({ rawData }) {
       className: 'page',
       content: <InsightsSection insights={insights}/>
     }
-  ], [period, totals, prevTotals, heroStats, roiEvidence, closureProgress, daily, roiAdvice, modelStrategy, insights]);
+  ], [period, totals, prevTotals, heroStats, roiEvidence, closureProgress, daily, roiAdvice, savingsSimulation, modelStrategy, insights, actionsByRule, periodAdvisorActions, addAdvisorAction, setAdvisorActionStatus]);
 
   const goToReviewPage = useCallback((index) => {
     const nextIndex = Math.max(0, Math.min(reviewPages.length - 1, index));

@@ -200,7 +200,7 @@ body::before {
   z-index: 1;
   max-width: 780px;
   margin: 0 auto;
-  padding: 80px 32px 120px;
+  padding: 80px 32px 180px;
 }
 
 .page-wide {
@@ -1153,6 +1153,161 @@ section.story:last-of-type  { padding-bottom: 56px; }
 
 /* ─── ROI Advisor ────────────────────────────────────────── */
 
+.savings-hero {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.savings-hero > div,
+.savings-card,
+.savings-unpriced {
+  border: 1px solid var(--rule-2);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.savings-hero > div {
+  padding: 18px;
+}
+
+.savings-hero span,
+.savings-head span,
+.savings-metrics span,
+.savings-detail span,
+.savings-unpriced h3 {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.savings-hero strong {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--serif);
+  font-size: 42px;
+  line-height: 1;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.savings-hero p,
+.savings-card p,
+.savings-unpriced p {
+  margin: 7px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.savings-list {
+  display: grid;
+  gap: 14px;
+}
+
+.savings-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 16px;
+  padding: 20px;
+}
+
+.savings-rank {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--green), transparent 88%);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.savings-body {
+  min-width: 0;
+}
+
+.savings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.savings-head h3 {
+  margin: 5px 0 0;
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.savings-head strong {
+  flex-shrink: 0;
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--good);
+  font-variant-numeric: tabular-nums;
+}
+
+.savings-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.savings-metrics > div,
+.savings-detail {
+  border: 1px solid var(--rule-2);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--paper-2), transparent 35%);
+}
+
+.savings-metrics > div {
+  min-width: 0;
+  padding: 10px;
+}
+
+.savings-metrics strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.savings-detail {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 12px 14px;
+}
+
+.savings-detail p {
+  margin: 0 0 7px;
+}
+
+.savings-detail p:last-child {
+  margin-bottom: 0;
+}
+
+.savings-unpriced {
+  margin-top: 14px;
+  padding: 16px;
+  background: color-mix(in oklab, var(--amber), var(--paper) 92%);
+}
+
+.savings-unpriced h3 {
+  margin: 0 0 6px;
+  color: var(--ink-soft);
+}
+
 .advisor-list {
   display: grid;
   gap: 14px;
@@ -1303,6 +1458,199 @@ section.story:last-of-type  { padding-bottom: 56px; }
 .advisor-actions button:hover {
   background: var(--paper-3);
   color: var(--ink);
+}
+
+.advisor-action-loop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule-2);
+}
+
+.advisor-action-loop button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.advisor-action-loop button:hover:not(:disabled) {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+
+.advisor-action-loop button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.advisor-action-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.advisor-action-status.status-done {
+  background: color-mix(in oklab, var(--good), transparent 86%);
+  color: var(--ink);
+}
+
+.advisor-action-status.status-dismissed {
+  background: color-mix(in oklab, var(--ink-soft), transparent 88%);
+  color: var(--ink-3);
+}
+
+.advisor-action-summary-section {
+  padding-top: 48px;
+}
+
+.action-summary-hero {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.action-summary-hero > div {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--rule-2);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.action-summary-hero span,
+.action-summary-card-head span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.action-summary-hero strong {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--serif);
+  font-size: 42px;
+  line-height: 1;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.action-summary-hero p {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.action-summary-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.action-summary-toolbar button,
+.action-summary-card-actions button {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.action-summary-toolbar button:hover,
+.action-summary-card-actions button:hover {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+}
+
+.action-summary-toolbar button:disabled,
+.action-summary-card-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.action-summary-list {
+  display: grid;
+  gap: 10px;
+}
+
+.action-summary-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--rule-2);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.action-summary-card.status-open {
+  border-color: color-mix(in oklab, var(--indigo), transparent 70%);
+}
+
+.action-summary-card.status-done {
+  border-color: color-mix(in oklab, var(--good), transparent 70%);
+  background: color-mix(in oklab, var(--good), var(--paper) 94%);
+}
+
+.action-summary-card.status-dismissed {
+  opacity: 0.78;
+}
+
+.action-summary-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.action-summary-card-head b {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.action-summary-card h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.action-summary-card p,
+.action-summary-card small {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.action-summary-card small {
+  color: var(--ink-soft);
+}
+
+.action-summary-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .advisor-risk .advisor-rank,
@@ -1717,12 +2065,15 @@ section.story:last-of-type  { padding-bottom: 56px; }
 .review-page-controls {
   position: fixed;
   right: 22px;
-  bottom: 22px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
   z-index: 35;
   display: grid;
-  grid-template-columns: auto minmax(92px, auto) auto auto;
+  grid-template-columns: 1fr;
   align-items: center;
   gap: 8px;
+  width: 152px;
   padding: 9px;
   border: 1px solid var(--rule-2);
   border-radius: 12px;
@@ -1797,6 +2148,8 @@ section.story:last-of-type  { padding-bottom: 56px; }
 
 .review-page-dots {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 5px;
   padding: 0 4px;
@@ -1868,9 +2221,16 @@ section.story:last-of-type  { padding-bottom: 56px; }
   .closure-gap-rank { width: 100%; justify-content: start; padding-left: 9px; }
   .closure-gap-row b,
   .closure-gap-row > div:last-child span { text-align: left; }
+  .savings-hero { grid-template-columns: 1fr; }
+  .savings-card { grid-template-columns: 1fr; }
+  .savings-head { flex-direction: column; }
+  .savings-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .advisor-card { grid-template-columns: 1fr; }
   .advisor-head { flex-direction: column; }
   .advisor-grid { grid-template-columns: 1fr; }
+  .action-summary-hero { grid-template-columns: 1fr; }
+  .action-summary-toolbar { justify-content: stretch; }
+  .action-summary-toolbar button { width: 100%; }
   .strategy-coverage { grid-template-columns: 1fr; }
   .strategy-coverage > div {
     border-right: 0;
@@ -1883,14 +2243,18 @@ section.story:last-of-type  { padding-bottom: 56px; }
   .donut-wrap   { margin: 0 auto; }
   .hero-headline { font-size: 56px; }
   .section-title { font-size: 30px; }
-  .page { padding: 60px 22px 80px; }
+  .page { padding: 60px 22px 210px; }
   .review-page {
     scroll-margin-top: 120px;
+    min-height: calc(100vh - 80px);
   }
   .review-page-controls {
     left: 12px;
     right: 12px;
+    top: auto;
     bottom: 12px;
+    transform: none;
+    width: auto;
     grid-template-columns: auto minmax(68px, 1fr) auto;
   }
   .review-page-dots {

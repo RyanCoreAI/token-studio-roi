@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { configuredPath, configuredPaths, expandPath } from './collector-config.mjs';
+import { configuredPath, configuredPaths } from './collector-config.mjs';
+import { auditStructuredUsage } from './collectors/structured-usage.mjs';
 
 const STABLE_FIELDS = [
   'date',
@@ -26,6 +27,16 @@ const EXPERIMENTAL_FIELDS = [
   'cache_tokens',
   'tool_category',
   'file_extension'
+];
+
+const IMPORT_FIELDS = [
+  'date',
+  'session',
+  'model',
+  'input_tokens',
+  'output_tokens',
+  'cache_tokens',
+  'cost_usd'
 ];
 
 export const COLLECTOR_REGISTRY = [
@@ -73,21 +84,36 @@ export const COLLECTOR_REGISTRY = [
   experimentalCollector('qwen', 'Qwen Code', {
     module: './collectors/qwen.mjs',
     privacyLevel: 'metadata-only',
-    roots: () => ['~/.qwen', '~/.qwen-code'].map(expandPath),
+    roots: () => configuredPaths('qwen', 'roots', ['~/.qwen', '~/.qwen-code']),
     note: 'Experimental: supports fixture-backed structured usage logs without transcript ingestion.'
   }),
   experimentalCollector('kimi', 'Kimi / Moonshot Coding CLI', {
     module: './collectors/kimi.mjs',
     privacyLevel: 'metadata-only',
-    roots: () => ['~/.kimi', '~/.moonshot'].map(expandPath),
+    roots: () => configuredPaths('kimi', 'roots', ['~/.kimi', '~/.moonshot']),
     note: 'Experimental: supports fixture-backed structured usage logs without transcript ingestion.'
   }),
   experimentalCollector('goose', 'Goose', {
     module: './collectors/goose.mjs',
     privacyLevel: 'metadata-only',
-    roots: () => ['~/.config/goose', '~/.goose'].map(expandPath),
+    roots: () => configuredPaths('goose', 'roots', ['~/.config/goose', '~/.goose']),
     note: 'Experimental: supports explicit token metadata only; no prompt or response text is imported.'
-  })
+  }),
+  importOnlyCollector('ccusage', 'ccusage JSON Import', {
+    roots: () => configuredPaths('ccusage', 'roots', []),
+    note: 'Import-only: use token-studio import-usage --format=ccusage-json to ingest documented ccusage JSON output.'
+  }),
+  detectedOnlyCollector('amp', 'Amp', ['~/.config/amp', '~/.amp']),
+  detectedOnlyCollector('droid', 'Droid', ['~/.droid', '~/.config/droid']),
+  detectedOnlyCollector('codebuff', 'Codebuff', ['~/.codebuff', '~/.config/codebuff']),
+  detectedOnlyCollector('pi-agent', 'pi-agent', ['~/.pi-agent', '~/.config/pi-agent']),
+  detectedOnlyCollector('roo-code', 'Roo Code', ['~/.roo-code', '~/.config/roo-code']),
+  detectedOnlyCollector('zed-agent', 'Zed Agent', ['~/.config/zed', '~/Library/Application Support/Zed']),
+  detectedOnlyCollector('antigravity', 'Antigravity', ['~/.antigravity', '~/.config/antigravity']),
+  detectedOnlyCollector('cline', 'Cline', ['~/.cline', '~/.config/cline']),
+  detectedOnlyCollector('kiro', 'Kiro', ['~/.kiro', '~/.config/kiro']),
+  detectedOnlyCollector('grok-build', 'Grok Build', ['~/.grok', '~/.config/grok']),
+  detectedOnlyCollector('kilo', 'Kilo', ['~/.kilo', '~/.config/kilo'])
 ];
 
 export function listCollectors() {
@@ -134,9 +160,42 @@ export function detectCollectors() {
       readsConversationContent: Boolean(item.readsConversationContent),
       tokenReliability: item.tokenReliability || 'unknown',
       fixtureBacked: Boolean(item.fixtures),
+      auditRecommended: item.supportStatus === 'experimental',
+      lastAudit: null,
       note: item.note || null
     };
   });
+}
+
+export async function auditExperimentalCollectors() {
+  const auditedAt = new Date().toISOString();
+  const collectors = [];
+
+  for (const item of COLLECTOR_REGISTRY.filter(row => row.supportStatus === 'experimental')) {
+    const roots = item.roots().filter(Boolean);
+    const existingRoots = roots.filter(path => existsSync(path));
+    const summary = existingRoots.length
+      ? await auditStructuredUsage({ roots: existingRoots })
+      : emptyAuditSummary();
+    collectors.push({
+      id: item.id,
+      label: item.label,
+      supportStatus: item.supportStatus,
+      auditRecommended: true,
+      detected: existingRoots.length > 0,
+      privacyLevel: item.privacyLevel,
+      tokenReliability: item.tokenReliability || 'unknown',
+      readsConversationContent: Boolean(item.readsConversationContent),
+      auditedAt,
+      summary
+    });
+  }
+
+  return {
+    auditedAt,
+    collectors,
+    totals: collectors.reduce((acc, item) => addAuditSummary(acc, item.summary), emptyAuditSummary())
+  };
 }
 
 export function enabledCollectorIds({ includeExperimental = false, values = null } = {}) {
@@ -188,6 +247,40 @@ function experimentalCollector(id, label, options) {
   };
 }
 
+function importOnlyCollector(id, label, options) {
+  return {
+    id,
+    label,
+    module: null,
+    privacyLevel: 'metadata-only',
+    defaultEnabled: false,
+    supportStatus: 'import-only',
+    fixtures: null,
+    dataFields: IMPORT_FIELDS,
+    readsConversationContent: false,
+    tokenReliability: 'external-json-token-fields',
+    roots: options.roots,
+    note: options.note
+  };
+}
+
+function detectedOnlyCollector(id, label, roots) {
+  return {
+    id,
+    label,
+    module: null,
+    privacyLevel: 'detected-only',
+    defaultEnabled: false,
+    supportStatus: 'detected-only',
+    fixtures: null,
+    dataFields: [],
+    readsConversationContent: false,
+    tokenReliability: 'unknown-no-usage-import',
+    roots: () => configuredPaths(id, 'roots', roots),
+    note: 'Detected-only: Token Studio can show local presence, but it will not write token usage until a reliable token field is audited.'
+  };
+}
+
 function globalCollectorConfig() {
   try {
     const path = join(process.cwd(), 'config', 'collectors.json');
@@ -201,19 +294,40 @@ function globalCollectorConfig() {
 function cursorRoots() {
   const appData = process.env.APPDATA;
   const localAppData = process.env.LOCALAPPDATA;
-  return [
+  return configuredPaths('cursor', 'roots', [
     appData ? join(appData, 'Cursor') : null,
     localAppData ? join(localAppData, 'Programs', 'Cursor') : null,
     '~/.config/Cursor',
     '~/Library/Application Support/Cursor'
-  ].map(expandPath).filter(Boolean);
+  ]);
 }
 
 function copilotRoots() {
-  return [
+  return configuredPaths('copilot', 'roots', [
     '~/.config/github-copilot',
     '~/.copilot',
     '~/Library/Application Support/github-copilot',
     process.env.APPDATA ? join(process.env.APPDATA, 'GitHub Copilot') : null
-  ].map(expandPath).filter(Boolean);
+  ]);
+}
+
+function emptyAuditSummary() {
+  return {
+    candidateFiles: 0,
+    usableTokenRecords: 0,
+    skippedNoTokenRecords: 0,
+    skippedConversationLikeRecords: 0,
+    skippedOversizedFiles: 0,
+    parseErrors: 0
+  };
+}
+
+function addAuditSummary(target, source) {
+  target.candidateFiles += source.candidateFiles || 0;
+  target.usableTokenRecords += source.usableTokenRecords || 0;
+  target.skippedNoTokenRecords += source.skippedNoTokenRecords || 0;
+  target.skippedConversationLikeRecords += source.skippedConversationLikeRecords || 0;
+  target.skippedOversizedFiles += source.skippedOversizedFiles || 0;
+  target.parseErrors += source.parseErrors || 0;
+  return target;
 }

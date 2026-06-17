@@ -292,6 +292,48 @@ export function App() {
       });
   }, [loadData]);
 
+  const importCcusageJson = useCallback((payload) => {
+    return fetch('/api/import/ccusage-json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(async r => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        if (payload.apply) await loadData();
+        return data;
+      });
+  }, [loadData]);
+
+  const saveBudgetProfile = useCallback((payload) => {
+    return fetch('/api/budget-profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(async r => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        await loadData();
+        return data.profile;
+      });
+  }, [loadData]);
+
+  const deleteBudgetProfile = useCallback((payload) => {
+    return fetch('/api/budget-profiles', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(async r => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        await loadData();
+        return data.deleted;
+      });
+  }, [loadData]);
+
   const applyAutoAttribution = useCallback((payload) => {
     return fetch('/api/auto-attribution/apply', {
       method: 'POST',
@@ -373,6 +415,9 @@ export function App() {
         onCreateBackup={createBackup}
         onExportAnnotations={exportAnnotations}
         onImportAnnotations={importAnnotations}
+        onImportCcusageJson={importCcusageJson}
+        onSaveBudgetProfile={saveBudgetProfile}
+        onDeleteBudgetProfile={deleteBudgetProfile}
         onApplyAutoAttribution={applyAutoAttribution}
         onUndoAutoAttribution={undoAutoAttribution} />
       {collectConfirmOpen && (
@@ -408,6 +453,9 @@ function Dashboard({
   onCreateBackup,
   onExportAnnotations,
   onImportAnnotations,
+  onImportCcusageJson,
+  onSaveBudgetProfile,
+  onDeleteBudgetProfile,
   onApplyAutoAttribution,
   onUndoAutoAttribution
 }) {
@@ -431,6 +479,7 @@ function Dashboard({
   const [autoAttributionBusy, setAutoAttributionBusy] = useState(false);
   const [autoAttributionMessage, setAutoAttributionMessage] = useState(null);
   const [lastAutoRunId, setLastAutoRunId] = useState(null);
+  const [importBudgetOpen, setImportBudgetOpen] = useState(false);
 
   // Build option lists
   const allSources = useMemo(() => Array.from(new Set(M.daily.map(r => r.source))), [M.daily]);
@@ -651,7 +700,8 @@ function Dashboard({
         onCollect={onCollect}
         collecting={collecting}
         collectStatus={collectStatus}
-        demoMode={M.meta?.demoMode} />
+        demoMode={M.meta?.demoMode}
+        onOpenImportBudget={() => setImportBudgetOpen(true)} />
 
       <FilterBar
         f={filters}
@@ -828,6 +878,15 @@ function Dashboard({
             }
           }} />
       )}
+      {importBudgetOpen && (
+        <ImportBudgetModal
+          sources={allSources}
+          budgetProfiles={M.budgetProfiles || []}
+          onImportCcusageJson={onImportCcusageJson}
+          onSaveBudgetProfile={onSaveBudgetProfile}
+          onDeleteBudgetProfile={onDeleteBudgetProfile}
+          onClose={() => setImportBudgetOpen(false)} />
+      )}
     </div>
   );
 }
@@ -864,6 +923,285 @@ function CollectConfirmModal({ busy, onClose, onConfirm }) {
         </div>
       </div>
     </>
+  );
+}
+
+function ImportBudgetModal({
+  sources,
+  budgetProfiles,
+  onImportCcusageJson,
+  onSaveBudgetProfile,
+  onDeleteBudgetProfile,
+  onClose
+}) {
+  const [importText, setImportText] = useState('');
+  const [importResult, setImportResult] = useState(null);
+  const [importError, setImportError] = useState(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [budgetBusy, setBudgetBusy] = useState(false);
+  const [budgetError, setBudgetError] = useState(null);
+  const [budgetForm, setBudgetForm] = useState(() => ({
+    source: sources[0] || 'Codex CLI',
+    label: '',
+    windowMinutes: 60,
+    tokenBudget: '',
+    costBudgetUSD: '',
+    enabled: true
+  }));
+
+  const runImport = async (apply) => {
+    setImportBusy(true);
+    setImportError(null);
+    try {
+      const result = await onImportCcusageJson({ text: importText, apply });
+      setImportResult(result);
+    } catch (error) {
+      setImportError(error.message || 'ccusage JSON 导入失败');
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const readImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportText(await file.text());
+    setImportResult(null);
+    setImportError(null);
+  };
+
+  const saveBudget = async () => {
+    setBudgetBusy(true);
+    setBudgetError(null);
+    try {
+      await onSaveBudgetProfile({
+        source: budgetForm.source.trim(),
+        label: budgetForm.label.trim() || `${budgetForm.source.trim()} custom budget`,
+        windowMinutes: Number(budgetForm.windowMinutes) || 60,
+        tokenBudget: budgetForm.tokenBudget === '' ? 0 : Number(budgetForm.tokenBudget),
+        costBudgetUSD: budgetForm.costBudgetUSD === '' ? 0 : Number(budgetForm.costBudgetUSD),
+        enabled: budgetForm.enabled
+      });
+      setBudgetForm(current => ({
+        ...current,
+        label: '',
+        tokenBudget: '',
+        costBudgetUSD: ''
+      }));
+    } catch (error) {
+      setBudgetError(error.message || '保存预算失败');
+    } finally {
+      setBudgetBusy(false);
+    }
+  };
+
+  const deleteBudget = async (profile) => {
+    setBudgetBusy(true);
+    setBudgetError(null);
+    try {
+      await onDeleteBudgetProfile({ id: profile.id });
+    } catch (error) {
+      setBudgetError(error.message || '删除预算失败');
+    } finally {
+      setBudgetBusy(false);
+    }
+  };
+
+  const canDryRun = importText.trim().length > 0 && !importBusy;
+  const canApply = canDryRun && importResult?.mode === 'dry-run' && !importResult.error;
+
+  return (
+    <>
+      <div className="modal-backdrop open" onClick={onClose}/>
+      <div className="annotation-modal import-budget-modal" role="dialog" aria-modal="true" aria-label="导入与预算">
+        <div className="annotation-modal-header">
+          <div>
+            <div className="eyebrow">导入与预算</div>
+            <h3>把 ccusage JSON 和自定义预算接入 ROI 复盘</h3>
+          </div>
+          <button className="drawer-close" onClick={onClose} disabled={importBusy || budgetBusy}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <path d="M3 3l7 7M10 3l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <div className="annotation-modal-body import-budget-body">
+          <section className="import-budget-section">
+            <div className="import-budget-section-head">
+              <div>
+                <h4>ccusage Import Wizard</h4>
+                <p>只接受结构化 token/model/session/time/cache 字段；发现 prompt、response、transcript、diff、content 等正文风险字段会拒绝。</p>
+              </div>
+              <span className="tag tag-soft">默认 dry-run</span>
+            </div>
+            <div className="form-grid">
+              <label className="form-field form-field-wide">
+                <span>粘贴 ccusage JSON</span>
+                <textarea
+                  value={importText}
+                  onChange={(event) => {
+                    setImportText(event.target.value);
+                    setImportResult(null);
+                    setImportError(null);
+                  }}
+                  placeholder='{"daily":[{"date":"2026-06-17","model":"claude-sonnet-4-5","inputTokens":1200,"outputTokens":300}]}'
+                />
+              </label>
+              <label className="form-field">
+                <span>或选择本地 JSON 文件</span>
+                <input type="file" accept="application/json,.json" onChange={readImportFile}/>
+              </label>
+              <div className="import-budget-actions">
+                <button className="btn" onClick={() => runImport(false)} disabled={!canDryRun}>
+                  {importBusy ? '预检中' : 'Dry-run 预检'}
+                </button>
+                <button className="btn btn-primary" onClick={() => runImport(true)} disabled={!canApply}>
+                  {importBusy ? '写入中' : 'Apply 写入 SQLite'}
+                </button>
+              </div>
+            </div>
+
+            {importError && <div className="form-error">{importError}</div>}
+            {importResult && (
+              <ImportPreview result={importResult}/>
+            )}
+          </section>
+
+          <section className="import-budget-section">
+            <div className="import-budget-section-head">
+              <div>
+                <h4>Budget Wizard</h4>
+                <p>只创建你自己的 source 级预算窗口，不内置或声称知道 Claude/Codex/Cursor 的真实套餐额度。</p>
+              </div>
+              <a className="btn" href="/live">打开 /live</a>
+            </div>
+            <div className="form-grid form-grid-3">
+              <label className="form-field">
+                <span>Source</span>
+                <input
+                  list="budget-source-options"
+                  value={budgetForm.source}
+                  onChange={(event) => setBudgetForm({ ...budgetForm, source: event.target.value })}
+                />
+                <datalist id="budget-source-options">
+                  {sources.map(source => <option key={source} value={source}/>)}
+                </datalist>
+              </label>
+              <label className="form-field">
+                <span>名称</span>
+                <input
+                  value={budgetForm.label}
+                  placeholder="Codex 15m budget"
+                  onChange={(event) => setBudgetForm({ ...budgetForm, label: event.target.value })}
+                />
+              </label>
+              <label className="form-field">
+                <span>窗口分钟</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={budgetForm.windowMinutes}
+                  onChange={(event) => setBudgetForm({ ...budgetForm, windowMinutes: event.target.value })}
+                />
+              </label>
+              <label className="form-field">
+                <span>Token 预算</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={budgetForm.tokenBudget}
+                  placeholder="500000"
+                  onChange={(event) => setBudgetForm({ ...budgetForm, tokenBudget: event.target.value })}
+                />
+              </label>
+              <label className="form-field">
+                <span>官方价预算 USD</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={budgetForm.costBudgetUSD}
+                  placeholder="25"
+                  onChange={(event) => setBudgetForm({ ...budgetForm, costBudgetUSD: event.target.value })}
+                />
+              </label>
+              <label className="form-field import-budget-toggle">
+                <span>启用</span>
+                <input
+                  type="checkbox"
+                  checked={budgetForm.enabled}
+                  onChange={(event) => setBudgetForm({ ...budgetForm, enabled: event.target.checked })}
+                />
+              </label>
+            </div>
+            {budgetError && <div className="form-error">{budgetError}</div>}
+            <div className="import-budget-actions">
+              <button className="btn btn-primary" onClick={saveBudget} disabled={budgetBusy || !budgetForm.source.trim() || (!budgetForm.tokenBudget && !budgetForm.costBudgetUSD)}>
+                {budgetBusy ? '保存中' : '保存预算'}
+              </button>
+            </div>
+            <BudgetProfileList profiles={budgetProfiles} busy={budgetBusy} onDelete={deleteBudget}/>
+          </section>
+        </div>
+
+        <div className="annotation-modal-actions">
+          <span className="muted">写入前会由服务端创建 SQLite 备份；导入完成后去 `/review` 查看 ROI 变化。</span>
+          <span className="form-spacer"/>
+          <button className="btn btn-primary" onClick={onClose} disabled={importBusy || budgetBusy}>完成</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ImportPreview({ result }) {
+  const backupName = result.backup?.fileName || result.backup?.path?.split(/[\\/]/).pop();
+  return (
+    <div className={`import-preview import-preview-${result.mode}`}>
+      <div className="import-preview-grid">
+        <div><span>模式</span><strong>{result.mode}</strong></div>
+        <div><span>JSON shape</span><strong>{result.detectedShape}</strong></div>
+        <div><span>Daily</span><strong>{result.daily}</strong></div>
+        <div><span>Sessions</span><strong>{result.sessions}</strong></div>
+        <div><span>Events</span><strong>{result.tokenEvents}</strong></div>
+        <div><span>写入</span><strong>{result.applied ? '已写入' : '未写入'}</strong></div>
+      </div>
+      {backupName && <p>备份：{backupName}</p>}
+      {result.warnings?.length > 0 && (
+        <div className="import-warning-list">
+          {result.warnings.slice(0, 4).map((warning, index) => (
+            <div key={`${warning.type}:${warning.model}:${index}`}>
+              <strong>{warning.type}</strong>
+              <span>{warning.model || 'unknown'} · {warning.reason}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BudgetProfileList({ profiles, busy, onDelete }) {
+  if (!profiles.length) {
+    return <div className="empty compact-empty">还没有预算窗口。先给常用 source 建一个自定义 token 或官方价预算。</div>;
+  }
+  return (
+    <div className="budget-profile-list">
+      {profiles.map(profile => (
+        <article key={profile.id} className={`budget-profile-row ${profile.enabled ? 'enabled' : 'disabled'}`}>
+          <div>
+            <strong>{profile.label}</strong>
+            <span>{profile.source} · {profile.windowMinutes} min · {profile.enabled ? '生效中' : '已停用'}</span>
+          </div>
+          <div>
+            <b>{profile.tokenBudget ? `${U.compactCN(profile.tokenBudget)} tokens` : '— tokens'}</b>
+            <span>{profile.costBudgetUSD ? U.fmtUS.format(profile.costBudgetUSD) : '— USD'}</span>
+          </div>
+          <button className="btn btn-mini" onClick={() => onDelete(profile)} disabled={busy}>删除</button>
+        </article>
+      ))}
+    </div>
   );
 }
 

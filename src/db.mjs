@@ -13,6 +13,8 @@ export const PROJECT_ALIAS_MATCH_TYPES = ['prefix', 'contains', 'regex'];
 export const ANNOTATION_SOURCES = ['manual', 'auto', 'imported'];
 export const PRIVACY_LEVELS = ['safe', 'hashed', 'redacted', 'unavailable'];
 export const WORK_ITEM_TYPES = ['未分类', '功能开发', '问题修复', '代码审查', '技术调研', '内容创作', '运维配置', '其他'];
+export const BUDGET_WINDOW_TYPES = ['rolling'];
+export const ADVISOR_ACTION_STATUSES = ['open', 'done', 'dismissed'];
 export const DEFAULT_SESSION_ANNOTATION = {
   projectAlias: null,
   taskType: TASK_TYPES[0],
@@ -186,6 +188,33 @@ function initSchema(db) {
         ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS budget_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL DEFAULT '',
+      label TEXT NOT NULL,
+      window_type TEXT NOT NULL DEFAULT 'rolling',
+      window_minutes INTEGER NOT NULL DEFAULT 300,
+      token_budget INTEGER NOT NULL DEFAULT 0,
+      cost_budget_usd REAL NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS advisor_actions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      action TEXT NOT NULL,
+      evidence TEXT,
+      source_rule TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_daily_usage_date ON daily_usage(usage_date);
     CREATE INDEX IF NOT EXISTS idx_daily_usage_source ON daily_usage(source);
     CREATE INDEX IF NOT EXISTS idx_session_usage_total ON session_usage(total_tokens DESC);
@@ -196,6 +225,9 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_token_events_session ON token_events(device, source, session_id);
     CREATE INDEX IF NOT EXISTS idx_token_events_time ON token_events(timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_work_items_status ON work_items(status, value_level);
+    CREATE INDEX IF NOT EXISTS idx_budget_profiles_enabled ON budget_profiles(enabled, source);
+    CREATE INDEX IF NOT EXISTS idx_advisor_actions_period ON advisor_actions(period_start, period_end, status);
+    CREATE INDEX IF NOT EXISTS idx_advisor_actions_rule ON advisor_actions(period_start, period_end, source_rule);
   `);
   ensureColumn(db, 'session_annotations', 'work_purpose', "TEXT NOT NULL DEFAULT '未说明'");
   ensureColumn(db, 'session_annotations', 'work_stage', "TEXT NOT NULL DEFAULT '未说明'");
@@ -209,6 +241,7 @@ function initSchema(db) {
   ensureColumn(db, 'session_outputs', 'output_type', "TEXT NOT NULL DEFAULT '未分类'");
   db.exec('CREATE INDEX IF NOT EXISTS idx_session_annotations_work ON session_annotations(work_purpose, work_stage, value_level)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_session_annotations_provenance ON session_annotations(annotation_source, annotation_confidence, auto_run_id)');
+  ensureColumn(db, 'advisor_actions', 'updated_at', "TEXT NOT NULL DEFAULT (datetime('now'))");
 }
 
 export function upsertDaily(db, row) {
@@ -979,6 +1012,202 @@ export function deleteWorkItem(db, row = {}) {
   return db.prepare('DELETE FROM work_items WHERE id = ?').run(id).changes;
 }
 
+export function normalizeBudgetProfile(row = {}) {
+  const id = normalizeOptionalId(row.id, 'id');
+  const source = normalizeOptionalText(row.source, 'source', 120) || '';
+  const label = normalizedRequiredMax(row.label, 'label', 140);
+  const windowType = normalizeEnum(row.windowType ?? row.window_type, BUDGET_WINDOW_TYPES, 'rolling', 'windowType');
+  const windowMinutes = normalizePositiveInteger(row.windowMinutes ?? row.window_minutes, 'windowMinutes', 10_080);
+  const tokenBudget = normalizeTokenCount(row.tokenBudget ?? row.token_budget, 'tokenBudget');
+  const costBudgetUSD = normalizeNonNegativeNumber(row.costBudgetUSD ?? row.cost_budget_usd, 'costBudgetUSD');
+  const enabled = normalizeBoolean(row.enabled, true);
+  if (tokenBudget === 0 && costBudgetUSD === 0) {
+    throw new Error('tokenBudget or costBudgetUSD must be greater than 0');
+  }
+  return { id, source, label, windowType, windowMinutes, tokenBudget, costBudgetUSD, enabled };
+}
+
+export function upsertBudgetProfile(db, row = {}) {
+  const profile = normalizeBudgetProfile(row);
+  db.prepare(`
+    INSERT INTO budget_profiles (
+      id, source, label, window_type, window_minutes,
+      token_budget, cost_budget_usd, enabled, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      source = excluded.source,
+      label = excluded.label,
+      window_type = excluded.window_type,
+      window_minutes = excluded.window_minutes,
+      token_budget = excluded.token_budget,
+      cost_budget_usd = excluded.cost_budget_usd,
+      enabled = excluded.enabled,
+      updated_at = datetime('now')
+  `).run(
+    profile.id,
+    profile.source,
+    profile.label,
+    profile.windowType,
+    profile.windowMinutes,
+    profile.tokenBudget,
+    profile.costBudgetUSD,
+    profile.enabled ? 1 : 0
+  );
+  const id = profile.id ?? db.prepare('SELECT last_insert_rowid() AS id').get().id;
+  return getBudgetProfile(db, id);
+}
+
+export function getBudgetProfile(db, id) {
+  const profileId = normalizeRequiredId(id, 'id');
+  const row = db.prepare(`
+    SELECT id, source, label,
+      window_type AS windowType,
+      window_minutes AS windowMinutes,
+      token_budget AS tokenBudget,
+      cost_budget_usd AS costBudgetUSD,
+      enabled,
+      updated_at AS updatedAt
+    FROM budget_profiles
+    WHERE id = ?
+  `).get(profileId);
+  return row ? { ...row, enabled: Boolean(row.enabled) } : null;
+}
+
+export function listBudgetProfiles(db) {
+  return db.prepare(`
+    SELECT id, source, label,
+      window_type AS windowType,
+      window_minutes AS windowMinutes,
+      token_budget AS tokenBudget,
+      cost_budget_usd AS costBudgetUSD,
+      enabled,
+      updated_at AS updatedAt
+    FROM budget_profiles
+    ORDER BY enabled DESC, source ASC, updated_at DESC, id DESC
+  `).all().map(row => ({ ...row, enabled: Boolean(row.enabled) }));
+}
+
+export function deleteBudgetProfile(db, row = {}) {
+  const id = normalizeRequiredId(row.id, 'id');
+  return db.prepare('DELETE FROM budget_profiles WHERE id = ?').run(id).changes;
+}
+
+export function normalizeAdvisorAction(row = {}) {
+  const id = normalizeOptionalId(row.id, 'id');
+  const periodStart = normalizedRequiredMax(row.periodStart ?? row.period_start, 'periodStart', 40);
+  const periodEnd = normalizedRequiredMax(row.periodEnd ?? row.period_end, 'periodEnd', 40);
+  const category = normalizedRequiredMax(row.category, 'category', 80);
+  const title = normalizedRequiredMax(row.title, 'title', 180);
+  const action = normalizedRequiredMax(row.action, 'action', 700);
+  const evidence = normalizeOptionalText(row.evidence, 'evidence', 1200);
+  const sourceRule = normalizeOptionalText(row.sourceRule ?? row.source_rule, 'sourceRule', 180);
+  const status = normalizeEnum(row.status, ADVISOR_ACTION_STATUSES, 'open', 'status');
+  const completedAt = status === 'open'
+    ? null
+    : normalizeOptionalText(row.completedAt ?? row.completed_at, 'completedAt', 80) || new Date().toISOString();
+  return { id, periodStart, periodEnd, category, title, action, evidence, sourceRule, status, completedAt };
+}
+
+export function upsertAdvisorAction(db, row = {}) {
+  const item = normalizeAdvisorAction(row);
+  const existing = item.id ? null : item.sourceRule
+    ? db.prepare(`
+      SELECT id FROM advisor_actions
+      WHERE period_start = ? AND period_end = ? AND source_rule = ?
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(item.periodStart, item.periodEnd, item.sourceRule)
+    : null;
+  const id = item.id ?? existing?.id ?? null;
+
+  db.prepare(`
+    INSERT INTO advisor_actions (
+      id, period_start, period_end, category, title, action,
+      evidence, source_rule, status, completed_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      period_start = excluded.period_start,
+      period_end = excluded.period_end,
+      category = excluded.category,
+      title = excluded.title,
+      action = excluded.action,
+      evidence = excluded.evidence,
+      source_rule = excluded.source_rule,
+      status = excluded.status,
+      completed_at = excluded.completed_at,
+      updated_at = datetime('now')
+  `).run(
+    id,
+    item.periodStart,
+    item.periodEnd,
+    item.category,
+    item.title,
+    item.action,
+    item.evidence,
+    item.sourceRule,
+    item.status,
+    item.completedAt
+  );
+  return getAdvisorAction(db, id ?? db.prepare('SELECT last_insert_rowid() AS id').get().id);
+}
+
+export function getAdvisorAction(db, id) {
+  const itemId = normalizeRequiredId(id, 'id');
+  return db.prepare(`
+    SELECT id,
+      period_start AS periodStart,
+      period_end AS periodEnd,
+      category, title, action, evidence,
+      source_rule AS sourceRule,
+      status,
+      created_at AS createdAt,
+      completed_at AS completedAt,
+      updated_at AS updatedAt
+    FROM advisor_actions
+    WHERE id = ?
+  `).get(itemId);
+}
+
+export function listAdvisorActions(db, filters = {}) {
+  const periodStart = normalizeOptionalText(filters.periodStart ?? filters.period_start, 'periodStart', 40);
+  const periodEnd = normalizeOptionalText(filters.periodEnd ?? filters.period_end, 'periodEnd', 40);
+  if (periodStart && periodEnd) {
+    return db.prepare(`
+      SELECT id,
+        period_start AS periodStart,
+        period_end AS periodEnd,
+        category, title, action, evidence,
+        source_rule AS sourceRule,
+        status,
+        created_at AS createdAt,
+        completed_at AS completedAt,
+        updated_at AS updatedAt
+      FROM advisor_actions
+      WHERE period_start = ? AND period_end = ?
+      ORDER BY status = 'open' DESC, updated_at DESC, id DESC
+    `).all(periodStart, periodEnd);
+  }
+  return db.prepare(`
+    SELECT id,
+      period_start AS periodStart,
+      period_end AS periodEnd,
+      category, title, action, evidence,
+      source_rule AS sourceRule,
+      status,
+      created_at AS createdAt,
+      completed_at AS completedAt,
+      updated_at AS updatedAt
+    FROM advisor_actions
+    ORDER BY status = 'open' DESC, updated_at DESC, id DESC
+    LIMIT 200
+  `).all();
+}
+
+export function deleteAdvisorAction(db, row = {}) {
+  const id = normalizeRequiredId(row.id, 'id');
+  return db.prepare('DELETE FROM advisor_actions WHERE id = ?').run(id).changes;
+}
+
 function normalizeSessionIdentity(row = {}) {
   return {
     device: normalizedRequired(row.device, 'device'),
@@ -1036,6 +1265,22 @@ function normalizeTokenCount(value, field) {
   const number = Number(value || 0);
   if (!Number.isInteger(number) || number < 0) {
     throw new Error(`${field} must be a non-negative integer`);
+  }
+  return number;
+}
+
+function normalizePositiveInteger(value, field, max = Number.MAX_SAFE_INTEGER) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0 || number > max) {
+    throw new Error(`${field} must be a positive integer no greater than ${max}`);
+  }
+  return number;
+}
+
+function normalizeNonNegativeNumber(value, field) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number) || number < 0) {
+    throw new Error(`${field} must be a non-negative number`);
   }
   return number;
 }

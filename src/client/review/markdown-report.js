@@ -15,6 +15,8 @@ export function buildMarkdownReviewReport({
   sessions = [],
   workItems = [],
   roiAdvice = [],
+  savingsSimulation = null,
+  advisorActions = [],
   insights = [],
   generatedAt = new Date()
 } = {}) {
@@ -27,6 +29,7 @@ export function buildMarkdownReviewReport({
   const attributionBreakdown = buildAttributionBreakdown(sessions);
   const roiEvidence = buildRoiEvidence({ sessions, workItems });
   const actionItems = buildActionItems({ roiAdvice, sessions, outputRows });
+  const actionStatusRows = buildAdvisorActionRows(advisorActions, period);
 
   return [
     '# Token Studio Weekly Review',
@@ -124,7 +127,30 @@ export function buildMarkdownReviewReport({
       ])
     ) : '本期没有待补齐的高成本归因 session。',
     '',
-    '## 6. ROI Advisor 建议',
+    '## 6. 节省模拟',
+    '',
+    savingsSimulation?.suggestions?.length ? [
+      '官方价换算节省模拟只用于比较模型策略，不是供应商账单。',
+      '',
+      table(
+        ['建议', '当前层级', '建议层级', 'Sessions', 'Tokens', '当前官方价', '模拟后官方价', '可节省', '原因'],
+        savingsSimulation.suggestions.slice(0, 5).map(row => [
+          row.title,
+          tierLabel(row.currentTier),
+          tierLabel(row.suggestedTier),
+          row.sessionCount,
+          compactCN(row.totalTokens),
+          money(row.currentCostUSD),
+          money(row.simulatedCostUSD),
+          money(row.savingsUSD),
+          row.why
+        ])
+      )
+    ].join('\n') : '本期没有触发可计算的官方价节省建议。高价值已完成/已发布任务不会被建议降级模型。',
+    '',
+    savingsSimulation?.unpriced?.sessionCount ? `未纳入成本决策：${formatInt(savingsSimulation.unpriced.sessionCount)} 个 session、${compactCN(savingsSimulation.unpriced.totalTokens)} tokens 没有公开官方美元价，模型包括 ${safeText(savingsSimulation.unpriced.models.join('、') || 'unknown')}。` : '',
+    '',
+    '## 7. ROI Advisor 建议',
     '',
     roiAdvice.length ? roiAdvice.map((item, index) => [
       `### ${index + 1}. ${safeText(item.title)}`,
@@ -137,13 +163,28 @@ export function buildMarkdownReviewReport({
       `- 建议动作：${safeText(item.action)}`
     ].join('\n')).join('\n\n') : '本期没有触发 ROI Advisor 建议。',
     '',
-    '## 7. 下周行动清单',
+    '## 8. 本周行动状态',
+    '',
+    actionStatusRows.length ? table(
+      ['状态', '分类', '建议', '行动'],
+      actionStatusRows.map(row => [
+        statusLabel(row.status),
+        row.category,
+        row.title,
+        row.action
+      ])
+    ) : '本期还没有加入行动清单的 Advisor / 节省模拟建议。',
+    '',
+    '说明：完成行动只表示复盘流程状态；报告只展示行动前后同类 token / 官方价趋势，不证明真实因果节省。',
+    '',
+    '## 9. 下周行动清单',
     '',
     actionItems.length ? actionItems.map(item => `- ${safeText(item)}`).join('\n') : '- 保持当前模型和上下文使用策略，继续补充真实产出链接。',
     '',
-    '## 8. 口径说明',
+    '## 10. 口径说明',
     '',
     '- 金额为官方公开 token 单价换算，不是供应商账单或财务对账结果。',
+    '- 节省模拟使用当前 token 结构和已配置官方价模型做策略比较，不承诺真实账单节省。',
     '- ChatGPT 套餐额度、企业折扣、税费、区域价、Batch/Flex/Priority 和特殊长上下文计费不会自动套用。',
     '- 未公开官方美元价的模型保持“未定价”，不会按 $0 参与成本决策。',
     '- 自动归因是基于结构化元数据的规则推断，不等同人工确认；高成本自动项建议抽查。',
@@ -240,6 +281,27 @@ function buildActionItems({ roiAdvice = [], sessions = [], outputRows = [] }) {
   return Array.from(new Set(items)).slice(0, 8);
 }
 
+function buildAdvisorActionRows(actions = [], period = {}) {
+  return actions
+    .filter(action => !period?.start || (
+      action.periodStart === period.start && action.periodEnd === period.end
+    ))
+    .sort((a, b) => statusRank(a.status) - statusRank(b.status) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+    .slice(0, 12);
+}
+
+function statusRank(status) {
+  if (status === 'open') return 0;
+  if (status === 'done') return 1;
+  return 2;
+}
+
+function statusLabel(status) {
+  if (status === 'done') return '已完成';
+  if (status === 'dismissed') return '已忽略';
+  return '行动中';
+}
+
 function aggregateDaily(daily = []) {
   return daily.reduce((acc, row) => {
     acc.totalTokens += row.totalTokens || 0;
@@ -312,6 +374,14 @@ function money(value) {
 
 function pct(value) {
   return `${(Number(value || 0) * 100).toFixed(1)}%`;
+}
+
+function tierLabel(tier) {
+  if (tier === 'heavy') return '重模型';
+  if (tier === 'mid') return '中模型';
+  if (tier === 'light') return '轻量模型';
+  if (tier === 'unpriced') return '未定价';
+  return '未分层';
 }
 
 function formatDate(value) {

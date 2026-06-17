@@ -19,9 +19,23 @@ By default it does not read, display, or upload conversation content. Real colle
 | ccusage | Multi-tool AI coding usage and cost reports | Token Studio ROI focuses on work attribution, output evidence, and model policy |
 | CodeBurn | Local multi-agent cost tracking/TUI | Token Studio ROI focuses on review workflows and exportable ROI evidence |
 | token-dashboard | Claude Code cost details, tool/file heatmaps | Token Studio ROI keeps a stricter privacy boundary and stores only metadata, hashes, and file types |
-| Claude Code Usage Monitor | Burn rate and live quota monitoring | Token Studio ROI v4.0 prioritizes review closure; v4.1 can add a lightweight live page |
+| Claude Code Usage Monitor | Burn rate and live quota monitoring | Token Studio ROI adds custom budget windows and connects guardrails to ROI action review |
 
 See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller competitor reference and differentiation notes.
+
+## What Makes ROI Different?
+
+v4.4 focuses on decisions, not only metering, and makes it easier to bring external structured usage into the ROI workflow:
+
+- **ROI Savings Simulator**: compares official-price model switching scenarios for exploration, testing, context prep, low-value, and abandoned work.
+- **ccusage JSON Import**: imports documented ccusage JSON output for broader structured usage coverage while recomputing costs with Token Studio official pricing.
+- **Import / Budget Wizard**: paste or upload ccusage JSON in the Dashboard, dry-run first, inspect shape/session/event counts, unsafe fields, and unpriced models, then explicitly apply to SQLite.
+- **Budget Guardrails**: shows custom budget windows, burn projection, and near/over/exceeded warnings on `/live`.
+- **Advisor Action Loop**: turns Savings Simulator and ROI Advisor recommendations into open/done/dismissed actions and includes them in weekly Markdown reports.
+- **Collector Audit**: audits experimental collectors before upgrading support, without SQLite writes or full-path output.
+- **Work Evidence**: connects usage to projects, tasks, stages, value, output links, and work items.
+
+All dollar values are official-price conversions or simulations, not provider invoices.
 
 ## Quick Start
 
@@ -41,6 +55,10 @@ node src/cli.mjs demo
 node src/cli.mjs start
 node src/cli.mjs live
 node src/cli.mjs collectors
+node src/cli.mjs collectors --audit --json
+node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
+node src/cli.mjs budget list
+node src/cli.mjs report --period=week --format=markdown
 node src/cli.mjs doctor
 node src/cli.mjs privacy-check
 ```
@@ -52,12 +70,26 @@ npx @ryan/token-studio-roi demo
 npx @ryan/token-studio-roi start
 npx @ryan/token-studio-roi live
 npx @ryan/token-studio-roi collectors
+npx @ryan/token-studio-roi collectors --audit --json
+npx @ryan/token-studio-roi import-usage --format=ccusage-json --file ccusage.json --dry-run
+npx @ryan/token-studio-roi budget list
+npx @ryan/token-studio-roi report --period=week --format=markdown
 npx @ryan/token-studio-roi collect --sources=claude,codex
 npx @ryan/token-studio-roi doctor
 npx @ryan/token-studio-roi privacy-check
 ```
 
 `demo` uses synthetic data and does not scan real `.claude`, `.codex`, Cursor, or Copilot logs. `start` reads an existing SQLite database and does not collect automatically.
+
+## Screenshots
+
+These screenshots are from demo mode or sanitized synthetic data, not real local logs.
+
+![Token Studio ROI dashboard](docs/assets/token-studio-v44-dashboard.png)
+
+![Token Studio ROI review](docs/assets/token-studio-v44-review.png)
+
+![Token Studio ROI live guardrails](docs/assets/token-studio-v44-live.png)
 
 Real collection requires explicit confirmation:
 
@@ -75,9 +107,16 @@ Non-interactive shells refuse collection unless `--yes` is passed.
 - Work attribution: project, task type, output status, purpose, stage, value, and notes.
 - Output evidence: stores only URL, label, and output type.
 - ROI Evidence Score: checks whether attribution, outputs, manual confirmation, and work items are strong enough for ROI decisions.
+- ROI Savings Simulator: simulates model switching savings with official prices and keeps unpriced models out of dollar decisions.
 - ROI Advisor: local rules only, no LLM calls and no extra token usage.
+- Advisor Action Loop: add recommendations to an action list, mark them done or dismissed, and review trends without claiming causal savings.
 - Model Policy export: generates `MODEL_POLICY.md` from local structured history.
-- Live Monitor: `/live` shows recent 15-minute token, model, cache, and burn-rate metadata.
+- ccusage Import: `token-studio import-usage --format=ccusage-json` imports structured JSON without storing conversation content or adopting third-party cost estimates.
+- Import / Budget Wizard: dashboard entry for ccusage JSON dry-run/apply and budget-window creation.
+- Budget Guardrails: source-level custom token/cost budgets with near/over/exceeded warnings.
+- Live Monitor: `/live` shows recent 15-minute token, model, cache, burn-rate metadata, budget windows, and guardrail warnings.
+- Collector Audit: `token-studio collectors --audit` returns a safe experimental-source summary without writing SQLite.
+- Terminal Report: `token-studio report --period=week --format=table|markdown|json` prints a quick ROI review summary.
 - Privacy check: scans for real DBs, AI log directories, `.env`, generated exports, personal paths, and likely secrets.
 - Demo mode: public demos use synthetic data and show a Demo Mode badge.
 
@@ -113,6 +152,13 @@ Stable interfaces:
 - `GET /api/data`
 - `GET /api/collectors`
 - `GET /api/live`
+- `GET /api/budget-profiles`
+- `POST /api/budget-profiles`
+- `DELETE /api/budget-profiles`
+- `POST /api/import/ccusage-json`
+- `GET /api/advisor-actions`
+- `POST /api/advisor-actions`
+- `DELETE /api/advisor-actions/:id`
 - `GET /api/privacy-check`
 - `GET /api/model-policy.md`
 - `POST /api/collect`

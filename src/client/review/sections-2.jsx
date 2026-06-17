@@ -372,9 +372,102 @@ function MiniSpark({ values, color }) {
 }
 
 // ───────────────────────────────────────────────────────────────
+// Savings simulator — official-price model switching simulation
+// ───────────────────────────────────────────────────────────────
+function SavingsSimulatorSection({ simulation, actionsByRule = new Map(), onAddAction, onSetActionStatus }) {
+  if (!simulation) return null;
+  const suggestions = simulation.suggestions || [];
+  const unpriced = simulation.unpriced || {};
+
+  return (
+    <section className="story savings-section">
+      <div className="section-label">06 · 节省模拟</div>
+      <h2 className="section-title">哪些 token 可以少花一点</h2>
+      <p className="section-sub">官方价换算节省模拟只用于比较模型策略，不是供应商账单。未公开官方美元价的模型不会参与节省金额计算。</p>
+
+      <div className="savings-hero">
+        <div>
+          <span>模拟可节省</span>
+          <strong>{simulation.potentialSavingsUSD > 0 ? U.fmtUS4.format(simulation.potentialSavingsUSD) : '—'}</strong>
+          <p>{suggestions.length} 条模型切换建议 · 覆盖 {U.compactCN(suggestions.reduce((sum, row) => sum + row.totalTokens, 0))} tokens</p>
+        </div>
+        <div>
+          <span>当前官方价</span>
+          <strong>{simulation.totalCostUSD > 0 ? U.fmtUS4.format(simulation.totalCostUSD) : '—'}</strong>
+          <p>本期 {U.compactCN(simulation.totalTokens)} tokens；未定价 tokens 不进入美元节省判断。</p>
+        </div>
+      </div>
+
+      {suggestions.length ? (
+        <div className="savings-list">
+          {suggestions.map((item, index) => (
+            <article key={item.id} className="savings-card">
+              <div className="savings-rank">{String(index + 1).padStart(2, '0')}</div>
+              <div className="savings-body">
+                <div className="savings-head">
+                  <div>
+                    <span>{tierLabel(item.currentTier)} → {tierLabel(item.suggestedTier)}</span>
+                    <h3>{item.title}</h3>
+                  </div>
+                  <strong>{U.fmtUS4.format(item.savingsUSD)}</strong>
+                </div>
+                <p>{item.recommendation}</p>
+                <div className="savings-metrics">
+                  <SavingsMetric label="Sessions" value={item.sessionCount} />
+                  <SavingsMetric label="Tokens" value={U.compactCN(item.totalTokens)} />
+                  <SavingsMetric label="当前官方价" value={U.fmtUS4.format(item.currentCostUSD)} />
+                  <SavingsMetric label="模拟后" value={U.fmtUS4.format(item.simulatedCostUSD)} />
+                </div>
+                <div className="savings-detail">
+                  <span>为什么</span>
+                  <p>{item.why}</p>
+                  <span>建议动作</span>
+                  <p>{item.action}</p>
+                  <span>参考模型</span>
+                  <p>{item.suggestedModels.join('、') || tierLabel(item.suggestedTier)}</p>
+                </div>
+                <AdvisorActionControls
+                  existing={actionsByRule.get(`savings:${item.id}`)}
+                  onAdd={() => onAddAction?.({
+                    sourceRule: `savings:${item.id}`,
+                    category: '节省模拟',
+                    title: item.title,
+                    action: item.action,
+                    evidence: `${item.sessionCount} sessions · ${U.compactCN(item.totalTokens)} tokens · 可节省 ${U.fmtUS4.format(item.savingsUSD)}`
+                  })}
+                  onSetStatus={onSetActionStatus}
+                />
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="no-data">当前周期没有触发可计算的官方价节省建议。高价值已完成/已发布任务不会被建议降级模型。</div>
+      )}
+
+      {unpriced.sessionCount > 0 && (
+        <div className="savings-unpriced">
+          <h3>未纳入成本决策的模型</h3>
+          <p>{unpriced.sessionCount} 个 session、{U.compactCN(unpriced.totalTokens)} tokens 没有公开官方美元价：{unpriced.models.join('、') || 'unknown'}。这些模型只用于 token 和产出复盘，不按 $0 计算节省。</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SavingsMetric({ label, value }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
 // ROI Advisor — local rule based recommendations
 // ───────────────────────────────────────────────────────────────
-function RoiAdvisorSection({ suggestions }) {
+function RoiAdvisorSection({ suggestions, actionsByRule = new Map(), onAddAction, onSetActionStatus }) {
   const [copiedId, setCopiedId] = useState(null);
   const copyAdvisor = async (item, mode) => {
     const text = mode === 'action'
@@ -397,7 +490,7 @@ function RoiAdvisorSection({ suggestions }) {
   if (!suggestions.length) {
     return (
       <section className="story roi-advisor-section">
-        <div className="section-label">06 · ROI 建议</div>
+        <div className="section-label">07 · ROI 建议</div>
         <h2 className="section-title">当前没有明显的 ROI 风险</h2>
         <div className="no-data">本期没有触发模型选择、归因缺口或上下文效率建议。</div>
       </section>
@@ -406,7 +499,7 @@ function RoiAdvisorSection({ suggestions }) {
 
   return (
     <section className="story roi-advisor-section">
-      <div className="section-label">06 · ROI 建议</div>
+      <div className="section-label">07 · ROI 建议</div>
       <h2 className="section-title">用有限 token 做更高 ROI 的事</h2>
       <p className="section-sub">这些建议只基于本地结构化数据和规则，不调用模型，不读取对话正文。</p>
 
@@ -448,10 +541,180 @@ function RoiAdvisorSection({ suggestions }) {
                   {copiedId === `${item.id}:action` ? '已复制' : '复制行动项'}
                 </button>
               </div>
+              <AdvisorActionControls
+                existing={actionsByRule.get(`advisor:${item.id}`)}
+                onAdd={() => onAddAction?.({
+                  sourceRule: `advisor:${item.id}`,
+                  category: item.category || 'ROI Advisor',
+                  title: item.title,
+                  action: item.action,
+                  evidence: item.evidence
+                })}
+                onSetStatus={onSetActionStatus}
+              />
             </div>
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function AdvisorActionControls({ existing, onAdd, onSetStatus }) {
+  const [busy, setBusy] = useState(false);
+
+  const run = async (fn) => {
+    if (!fn) return;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!existing) {
+    return (
+      <div className="advisor-action-loop">
+        <button type="button" disabled={busy} onClick={() => run(onAdd)}>
+          {busy ? '保存中' : '加入行动清单'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="advisor-action-loop">
+      <span className={`advisor-action-status status-${existing.status}`}>
+        {existing.status === 'done' ? '已完成' : existing.status === 'dismissed' ? '已忽略' : '行动中'}
+      </span>
+      {existing.status !== 'done' && (
+        <button type="button" disabled={busy} onClick={() => run(() => onSetStatus?.(existing, 'done'))}>
+          标为完成
+        </button>
+      )}
+      {existing.status !== 'dismissed' && (
+        <button type="button" disabled={busy} onClick={() => run(() => onSetStatus?.(existing, 'dismissed'))}>
+          忽略本次
+        </button>
+      )}
+      {existing.status !== 'open' && (
+        <button type="button" disabled={busy} onClick={() => run(() => onSetStatus?.(existing, 'open'))}>
+          重新打开
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AdvisorActionSummarySection({ actions = [], period, onSetActionStatus }) {
+  const [busyId, setBusyId] = useState(null);
+  const counts = useMemo(() => ({
+    open: actions.filter(action => action.status === 'open').length,
+    done: actions.filter(action => action.status === 'done').length,
+    dismissed: actions.filter(action => action.status === 'dismissed').length
+  }), [actions]);
+  const ordered = useMemo(() => [...actions].sort((a, b) => {
+    const rank = { open: 0, done: 1, dismissed: 2 };
+    return (rank[a.status] ?? 3) - (rank[b.status] ?? 3)
+      || String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+  }), [actions]);
+
+  const setStatus = async (action, status) => {
+    setBusyId(action.id);
+    try {
+      await onSetActionStatus?.(action, status);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const exportActions = () => {
+    const lines = [
+      '# Token Studio Advisor Actions',
+      '',
+      `Period: ${period.start} to ${period.end}`,
+      '',
+      `- Open: ${counts.open}`,
+      `- Done: ${counts.done}`,
+      `- Dismissed: ${counts.dismissed}`,
+      '',
+      '## Actions',
+      ''
+    ];
+    if (!ordered.length) {
+      lines.push('No advisor actions in this period.');
+    } else {
+      for (const action of ordered) {
+        lines.push(`### [${action.status}] ${action.title}`);
+        lines.push(`- Category: ${action.category || 'ROI Advisor'}`);
+        lines.push(`- Action: ${action.action}`);
+        lines.push(`- Evidence: ${action.evidence || '—'}`);
+        lines.push(`- Rule: ${action.sourceRule || 'manual'}`);
+        lines.push('');
+      }
+    }
+    U.downloadText(`token-studio-actions-${period.start}-${period.end}.md`, lines.join('\n'), 'text/markdown;charset=utf-8');
+  };
+
+  return (
+    <section className="story advisor-action-summary-section">
+      <div className="section-label">08 · 行动清单</div>
+      <h2 className="section-title">建议有没有变成下一步动作</h2>
+      <p className="section-sub">这里只跟踪本期 Savings Simulator 和 ROI Advisor 生成的行动状态；完成行动不等同真实节省因果，只用于下次看同类 token / 官方价趋势。</p>
+
+      <div className="action-summary-hero">
+        <div>
+          <span>Open</span>
+          <strong>{counts.open}</strong>
+          <p>需要下周继续执行的模型、上下文或归因动作。</p>
+        </div>
+        <div>
+          <span>Done</span>
+          <strong>{counts.done}</strong>
+          <p>已完成动作会进入周报的行动状态。</p>
+        </div>
+        <div>
+          <span>Dismissed</span>
+          <strong>{counts.dismissed}</strong>
+          <p>忽略只代表本期不处理，不会删除原建议证据。</p>
+        </div>
+      </div>
+
+      <div className="action-summary-toolbar">
+        <button type="button" onClick={exportActions} disabled={!actions.length}>
+          导出行动清单 Markdown
+        </button>
+      </div>
+
+      {ordered.length ? (
+        <div className="action-summary-list">
+          {ordered.map(action => (
+            <article key={action.id} className={`action-summary-card status-${action.status}`}>
+              <div className="action-summary-card-head">
+                <span>{action.category || 'ROI Advisor'}</span>
+                <b>{action.status === 'done' ? '已完成' : action.status === 'dismissed' ? '已忽略' : '行动中'}</b>
+              </div>
+              <h3>{action.title}</h3>
+              <p>{action.action}</p>
+              {action.evidence && <small>{action.evidence}</small>}
+              <div className="action-summary-card-actions">
+                {action.status !== 'done' && (
+                  <button type="button" disabled={busyId === action.id} onClick={() => setStatus(action, 'done')}>标为完成</button>
+                )}
+                {action.status !== 'dismissed' && (
+                  <button type="button" disabled={busyId === action.id} onClick={() => setStatus(action, 'dismissed')}>忽略本次</button>
+                )}
+                {action.status !== 'open' && (
+                  <button type="button" disabled={busyId === action.id} onClick={() => setStatus(action, 'open')}>重新打开</button>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="no-data">还没有行动项。先在“节省模拟”或“ROI 建议”里把可执行建议加入行动清单。</div>
+      )}
     </section>
   );
 }
@@ -495,7 +758,7 @@ function ModelStrategySection({ strategy }) {
 
   return (
     <section className="story model-strategy-section">
-      <div className="section-label">07 · 模型策略</div>
+      <div className="section-label">09 · 模型策略</div>
       <h2 className="section-title">什么任务该用什么模型</h2>
       <p className="section-sub">按任务类型、工作阶段和产出价值观察模型使用效果。这里不读取正文，只使用你手动标注后的结构化字段。</p>
 
@@ -619,7 +882,7 @@ function InsightsSection({ insights }) {
   if (!insights.length) {
     return (
       <section className="story">
-        <div className="section-label">08 · 复盘</div>
+        <div className="section-label">10 · 复盘</div>
         <h2 className="section-title">几件值得复盘的小事</h2>
         <div className="no-data">本期没有明显的异常或趋势变化。</div>
       </section>
@@ -628,7 +891,7 @@ function InsightsSection({ insights }) {
 
   return (
       <section className="story">
-      <div className="section-label">08 · 复盘</div>
+      <div className="section-label">10 · 复盘</div>
       <h2 className="section-title">几件值得复盘的小事</h2>
       <p className="section-sub">基于你本期与上一周期的对比，自动挑出最值得关注的几条。点击展开看支撑数据。</p>
 
@@ -661,4 +924,4 @@ function InsightsSection({ insights }) {
   );
 }
 
-export { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, RoiAdvisorSection, ModelStrategySection, InsightsSection };
+export { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection };

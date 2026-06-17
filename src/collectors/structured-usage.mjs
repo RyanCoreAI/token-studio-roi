@@ -32,6 +32,29 @@ export async function listUsageFiles(roots) {
   return files;
 }
 
+export async function auditStructuredUsage({ roots }) {
+  const files = await listUsageFiles(roots);
+  const summary = {
+    candidateFiles: files.length,
+    usableTokenRecords: 0,
+    skippedNoTokenRecords: 0,
+    skippedConversationLikeRecords: 0,
+    skippedOversizedFiles: 0,
+    parseErrors: 0
+  };
+
+  for (const filePath of files) {
+    const result = await auditUsageFile(filePath);
+    summary.usableTokenRecords += result.usableTokenRecords;
+    summary.skippedNoTokenRecords += result.skippedNoTokenRecords;
+    summary.skippedConversationLikeRecords += result.skippedConversationLikeRecords;
+    summary.skippedOversizedFiles += result.skippedOversizedFiles;
+    summary.parseErrors += result.parseErrors;
+  }
+
+  return summary;
+}
+
 async function walk(dir, depth, files) {
   if (depth > MAX_DEPTH) return;
   let entries;
@@ -93,6 +116,94 @@ async function parseUsageFile(filePath) {
   } catch {
     return [];
   }
+}
+
+async function auditUsageFile(filePath) {
+  const summary = {
+    usableTokenRecords: 0,
+    skippedNoTokenRecords: 0,
+    skippedConversationLikeRecords: 0,
+    skippedOversizedFiles: 0,
+    parseErrors: 0
+  };
+
+  let info;
+  try {
+    info = await stat(filePath);
+  } catch {
+    summary.parseErrors += 1;
+    return summary;
+  }
+  if (info.size > MAX_FILE_BYTES) {
+    summary.skippedOversizedFiles += 1;
+    return summary;
+  }
+
+  let text;
+  try {
+    text = await readFile(filePath, 'utf8');
+  } catch {
+    summary.parseErrors += 1;
+    return summary;
+  }
+
+  if (extname(filePath).toLowerCase() === '.jsonl') {
+    for (const line of text.split(/\r?\n/).map(item => item.trim()).filter(Boolean)) {
+      auditJsonLine(line, summary);
+    }
+    return summary;
+  }
+
+  if (hasUnsafeConversationText(text)) {
+    summary.skippedConversationLikeRecords += 1;
+    return summary;
+  }
+
+  try {
+    const json = JSON.parse(text);
+    const rows = Array.isArray(json)
+      ? json
+      : Array.isArray(json.events) ? json.events
+        : Array.isArray(json.usage) ? json.usage
+          : Array.isArray(json.records) ? json.records
+            : [json];
+    for (const row of rows) {
+      auditRecord(row, summary);
+    }
+  } catch {
+    summary.parseErrors += 1;
+  }
+
+  return summary;
+}
+
+function auditJsonLine(line, summary) {
+  if (hasUnsafeConversationText(line)) {
+    summary.skippedConversationLikeRecords += 1;
+    return;
+  }
+  try {
+    auditRecord(JSON.parse(line), summary);
+  } catch {
+    summary.parseErrors += 1;
+  }
+}
+
+function auditRecord(row, summary) {
+  if (!row || typeof row !== 'object') {
+    summary.skippedNoTokenRecords += 1;
+    return;
+  }
+  if (looksLikeConversation(row)) {
+    summary.skippedConversationLikeRecords += 1;
+    return;
+  }
+  const tokens = normalizeTokens(row);
+  if (!hasReliableTokens(tokens)) {
+    summary.skippedNoTokenRecords += 1;
+    return;
+  }
+  summary.usableTokenRecords += 1;
 }
 
 function parseJsonLine(line, fallback) {
@@ -246,6 +357,10 @@ function looksLikeConversation(row) {
     || typeof row.diff === 'string'
     || typeof row.transcript === 'string'
     || Array.isArray(row.messages);
+}
+
+function hasUnsafeConversationText(text) {
+  return /"(prompt|response|content|diff|transcript|messages)"\s*:/i.test(String(text || ''));
 }
 
 function projectLabelFrom(row) {

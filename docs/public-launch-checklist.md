@@ -19,11 +19,17 @@ git diff --check
 - Confirm the UI shows Demo Mode.
 - Do not use real `data/usage.sqlite`.
 - Do not include real project paths, local usernames, exported reports, or private output URLs.
+- Current public screenshot assets:
+  - `docs/assets/token-studio-v44-dashboard.png`
+  - `docs/assets/token-studio-v44-review.png`
+  - `docs/assets/token-studio-v44-live.png`
+  - `docs/assets/token-studio-v44-review-mobile.png`
 
 ## GitHub Release
 
 - Repository name: `token-studio-roi`.
-- Tag: `v4.0.0` for the standalone public baseline.
+- Current RC tag target: `v4.4.0`.
+- Historical standalone baseline: `v4.0.0`.
 - Suggested topics: `ai-coding`, `token-usage`, `cost-tracking`, `local-first`, `privacy-first`, `roi`, `codex-cli`, `claude-code`.
 - Release notes should say cost is official public token-price conversion, not a provider invoice.
 - Keep `NOTICE.md` in the repository.

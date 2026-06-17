@@ -63,6 +63,46 @@ export function LiveApp() {
 
       {error && <div className="live-error">实时数据加载失败：{error}</div>}
 
+      {snapshot?.warnings?.length > 0 && (
+        <section className="live-warnings" aria-label="实时用量预警">
+          {snapshot.warnings.map(warning => (
+            <article key={warning.type} className={`live-warning ${warning.level || 'medium'}`}>
+              <div>
+                <span>{warning.level || 'medium'}</span>
+                <strong>{warning.message}</strong>
+                <p>{warning.evidence}</p>
+              </div>
+              <b>{warning.action}</b>
+            </article>
+          ))}
+        </section>
+      )}
+
+      {snapshot?.budgetWindows?.length > 0 && (
+        <section className="budget-windows" aria-label="预算窗口">
+          {snapshot.budgetWindows.map(window => (
+            <article key={window.id || window.label} className={`budget-window status-${window.status}`}>
+              <div className="budget-window-head">
+                <div>
+                  <span>{window.source || 'all sources'} · {window.windowMinutes}m rolling</span>
+                  <strong>{window.label}</strong>
+                </div>
+                <b>{budgetStatusLabel(window.status)}</b>
+              </div>
+              <div className="budget-meter" aria-hidden="true">
+                <span style={{width: `${Math.min(100, Math.max(window.tokenShare || 0, window.costShare || 0) * 100)}%`}}/>
+              </div>
+              <div className="budget-window-grid">
+                <BudgetMetric label="Tokens" value={`${formatNumber(window.totalTokens)} / ${window.tokenBudget ? formatNumber(window.tokenBudget) : '—'}`} />
+                <BudgetMetric label="官方价" value={`$${formatMoney(window.costUSD)} / ${window.costBudgetUSD ? `$${formatMoney(window.costBudgetUSD)}` : '—'}`} />
+                <BudgetMetric label="预计 Tokens" value={formatNumber(window.projectedTokens)} />
+                <BudgetMetric label="Burn Rate" value={`${formatNumber(window.burnRateTokensPerHour)}/h`} />
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
       <section className="live-grid">
         <MetricCard label="最近 Token" value={formatNumber(totals.totalTokens)} />
         <MetricCard label="Burn Rate / hour" value={formatNumber(totals.burnRateTokensPerHour)} />
@@ -131,6 +171,22 @@ function LivePanel({ title, children }) {
 
 function EmptyState({ text }) {
   return <div className="live-empty">{text}</div>;
+}
+
+function BudgetMetric({ label, value }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function budgetStatusLabel(status) {
+  if (status === 'exceeded') return '已超预算';
+  if (status === 'over-pace') return '会超预算';
+  if (status === 'near-limit') return '接近预算';
+  return '正常';
 }
 
 function formatNumber(value) {
