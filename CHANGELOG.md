@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.8.0
+
+- Renamed the npm package to `token-studio` with `npx token-studio demo` as the primary public entry.
+- Updated CLI path handling so npm-installed commands run package files from the installed package while writing demo/usage SQLite data into the caller's working directory.
+- Added Source Health Center data and UI for native stable, experimental, detected-only, and ccusage import-bridge sources without exposing full local paths.
+- Added `GET /api/source-health` and included source health metadata in `/api/data`.
+- Updated README quick start and public docs around npm launch, ccusage bridge coverage, privacy boundaries, and official-price/non-invoice wording.
+
 ## 4.7.0
 
 - Added Dashboard ccusage CLI Bridge UX that only generates copyable local commands; the browser never runs external scanners.

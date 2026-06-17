@@ -5,8 +5,9 @@ import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { createServer } from 'node:net';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { hostname } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { seedDemoDatabase } from './demo-seed.mjs';
 import { auditExperimentalCollectors, detectCollectors } from './collector-registry.mjs';
 import { CCUSAGE_CLI_REPORTS, ccusageInvocation, runCcusageCliImportPlan } from './ccusage-bridge.mjs';
@@ -19,6 +20,9 @@ import { buildModelPolicy, formatModelPolicy } from './model-policy.mjs';
 
 const command = process.argv[2] || 'help';
 const args = parseArgs(process.argv.slice(3));
+const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = resolve(SOURCE_DIR, '..');
+const USER_CWD = process.cwd();
 
 try {
   if (command === 'start') {
@@ -57,8 +61,11 @@ try {
 }
 
 async function demoCommand() {
-  const dbPath = resolve(process.cwd(), args.db || 'data/demo.sqlite');
-  const result = seedDemoDatabase({ dbPath });
+  const dbPath = resolve(USER_CWD, args.db || 'data/demo.sqlite');
+  const result = seedDemoDatabase({
+    dbPath,
+    demoPath: resolve(PACKAGE_ROOT, 'docs', 'demo-data', 'token-studio-v2-demo.json')
+  });
   console.log(`[demo] seeded ${result.sessions} sessions and ${result.daily} daily rows into ${result.dbPath}`);
   if (args.seedOnly) return;
   await startCommand({ demo: true, dbPath });
@@ -71,21 +78,21 @@ async function startCommand({ demo = false, dbPath = null, route = '/', openBrow
     ...process.env,
     PORT: String(apiPort),
     API_PORT: String(apiPort),
-    DB_PATH: dbPath || args.db || process.env.DB_PATH || resolve(process.cwd(), 'data', 'usage.sqlite'),
+    DB_PATH: dbPath || resolve(USER_CWD, args.db || process.env.DB_PATH || 'data/usage.sqlite'),
     TOKEN_STUDIO_DEMO_MODE: demo ? '1' : process.env.TOKEN_STUDIO_DEMO_MODE || ''
   };
-  const viteBin = resolve(process.cwd(), 'node_modules', 'vite', 'bin', 'vite.js');
+  const viteBin = resolve(PACKAGE_ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
   if (!existsSync(viteBin)) {
     throw new Error('Vite is not installed. Run npm install first, then retry token-studio start.');
   }
-  const server = spawn(process.execPath, ['src/server.mjs'], {
-    cwd: process.cwd(),
+  const server = spawn(process.execPath, [resolve(SOURCE_DIR, 'server.mjs')], {
+    cwd: PACKAGE_ROOT,
     env,
     stdio: 'inherit',
     windowsHide: true
   });
   const client = spawn(process.execPath, [viteBin, '--host', '127.0.0.1', '--port', String(uiPort)], {
-    cwd: process.cwd(),
+    cwd: PACKAGE_ROOT,
     env,
     stdio: 'inherit',
     windowsHide: true
@@ -109,7 +116,7 @@ async function collectCommand() {
   const collectArgs = ['src/collect.mjs', '--sources', sources];
   if (args.db) collectArgs.push('--db', args.db);
   const child = spawn(process.execPath, collectArgs, {
-    cwd: process.cwd(),
+    cwd: PACKAGE_ROOT,
     env: {
       ...process.env,
       TOKEN_STUDIO_COLLECTORS: sources
@@ -434,7 +441,7 @@ function openCliReadOnlyDb() {
 }
 
 function cliDbPath() {
-  return resolve(process.cwd(), args.db || process.env.DB_PATH || defaultDbPath);
+  return resolve(USER_CWD, args.db || process.env.DB_PATH || defaultDbPath);
 }
 
 function canListen(port) {
@@ -577,13 +584,13 @@ function printStatuslineHelp() {
     '  token-studio statusline --format=json --window-minutes=15',
     '',
     'Claude Code statusline command:',
-    '  node src/cli.mjs statusline --format=text --window-minutes=15 --max-width=100',
+    '  npx token-studio statusline --format=text --window-minutes=15 --max-width=100',
     '',
     'tmux:',
-    '  set -g status-right "#(node /path/to/token-studio-roi/src/cli.mjs statusline --format=text --max-width=80)"',
+    '  set -g status-right "#(npx token-studio statusline --format=text --max-width=80)"',
     '',
     'PowerShell prompt:',
-    '  function prompt { "$(node D:\\\\path\\\\token-studio-roi\\\\src\\\\cli.mjs statusline --format=text --max-width=80) PS $($PWD)> " }',
+    '  function prompt { "$(npx token-studio statusline --format=text --max-width=80) PS $($PWD)> " }',
     '',
     'Privacy:',
     '  statusline only reads local SQLite. It does not scan logs, run ccusage, or start a background process.'

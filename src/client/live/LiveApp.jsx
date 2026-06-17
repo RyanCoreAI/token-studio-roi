@@ -36,7 +36,7 @@ export function LiveApp() {
     ? new Date(snapshot.generatedAt).toLocaleTimeString()
     : 'waiting'
   , [snapshot]);
-  const statuslineCommand = `node src/cli.mjs statusline --format=text --window-minutes=${snapshot?.windowMinutes || 15}`;
+  const statuslineCommand = `npx token-studio statusline --format=text --window-minutes=${snapshot?.windowMinutes || 15}`;
 
   async function copyStatuslineCommand() {
     try {

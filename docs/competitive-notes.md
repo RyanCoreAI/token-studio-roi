@@ -27,7 +27,7 @@ Token Studio ROI is positioned as a local AI coding ROI review system, not only 
 - Collector Audit: safely checks experimental collector viability before upgrading support level, instead of inflating source count with unreliable estimates.
 - Terminal ROI Report: quick CLI summary of total tokens, official-price cost, project/model ranking, budget risks, and Advisor Actions.
 - Public safety: demo mode, privacy-check, `NOTICE.md`, no real SQLite in git, no prompt/response export.
-- Launch path: `git clone` demo today, `npx @ryan/token-studio-roi demo` after npm publication.
+- Launch path: `npx token-studio demo` after npm publication, with `git clone && npm run demo` kept as the source checkout path.
 - v4.1 coverage path: experimental Cursor, Copilot CLI, Qwen Code, Kimi, and Goose collectors skip records without explicit token fields.
 
 ## v4.3 High-ROI Product Bet
@@ -67,9 +67,20 @@ v4.7 keeps the same product wedge but makes the catch-up features easier to use:
 
 This closes practical gaps with terminal-first competitors while preserving the main differentiation: ROI evidence, work outputs, and explicit action loops.
 
+## v4.8 npm And Source Health Bet
+
+v4.8 makes the public launch path easier to try and easier to explain:
+
+- npm one-command launch: `npx token-studio demo` should get a new user into synthetic demo data within 30 seconds.
+- Source Health Center: show native stable, experimental, detected-only, and ccusage import-bridge support honestly, including detected status, recent rows, token-field trust, and privacy boundaries.
+- ccusage bridge as coverage shortcut: use ccusage's broad ecosystem through explicit JSON/CLI import while still recomputing costs with Token Studio official-price logic.
+- README first screen: position Token Studio ROI around Work Evidence, Savings Simulator, and Model Policy instead of competing only as a token meter.
+
+This narrows the most visible competitor gap, one-command startup and coverage clarity, without pretending that detected-only sources are real collectors.
+
 ## Remaining Gaps
 
-- Collector depth is still behind the broadest multi-tool products. v4.7 improves breadth through ccusage JSON/CLI bridge and detected-only coverage, but Token Studio's own stable collectors remain narrower than ccusage or TokenTracker.
+- Collector depth is still behind the broadest multi-tool products. v4.8 improves breadth through Source Health plus ccusage JSON/CLI bridge and detected-only coverage, but Token Studio's own stable collectors remain narrower than ccusage or TokenTracker.
 - Live monitoring is intentionally lightweight; it is a guardrail for current burn rate, not an exact subscription predictor.
 - Desktop packaging is not included. Keep the public story focused on local browser + CLI first.
 - Automatic attribution is rule-based and should always display provenance and confidence.

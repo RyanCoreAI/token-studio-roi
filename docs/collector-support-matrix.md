@@ -33,10 +33,10 @@ Experimental collectors are opt-in. They skip records without explicit token fie
 Import-only sources are explicit. Saved ccusage JSON does not scan local logs. The CLI bridge runs ccusage as an external local scanner only after confirmation or `--yes`; Token Studio receives structured JSON, rejects conversation-like fields, and recomputes official-price costs:
 
 ```bash
-node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
-node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --apply
-node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --yes
-node src/cli.mjs import-usage --format=ccusage-cli --report=blocks --apply --yes
+npx token-studio import-usage --format=ccusage-json --file ccusage.json --dry-run
+npx token-studio import-usage --format=ccusage-json --file ccusage.json --apply
+npx token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes
+npx token-studio import-usage --format=ccusage-cli --report=blocks --apply --yes
 ```
 
 The Dashboard ccusage CLI Bridge panel only builds these copyable commands. It does not run ccusage from the browser or through a new server-side scanner API.
@@ -48,7 +48,7 @@ Detected-only sources only report whether likely local paths exist. They do not 
 Token Studio collector audit provides:
 
 ```bash
-node src/cli.mjs collectors --audit --json
+npx token-studio collectors --audit --json
 ```
 
 The audit checks experimental collector roots and returns only safe counts:
@@ -61,3 +61,5 @@ The audit checks experimental collector roots and returns only safe counts:
 - parse errors
 
 It does not write SQLite, does not print full paths, and does not output prompt, response, diff, transcript, or message content. A collector should only move from experimental to stable after audit results show reliable token/model/time/session metadata on real local files. Detected-only collectors must first move to experimental with fixture coverage before they can ever become stable.
+
+From a cloned repository, replace `npx token-studio` with `node src/cli.mjs` for local development.

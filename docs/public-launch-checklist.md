@@ -15,7 +15,7 @@ git diff --check
 
 ## Screenshots
 
-- Use `npm run demo` or `token-studio demo`.
+- Use `npx token-studio demo` after npm publication, or `npm run demo` from a cloned repository.
 - Confirm the UI shows Demo Mode.
 - Do not use real `data/usage.sqlite`.
 - Do not include real project paths, local usernames, exported reports, or private output URLs.
@@ -28,8 +28,8 @@ git diff --check
 ## GitHub Release
 
 - Repository name: `token-studio-roi`.
-- Current public tag: `v4.6.0`.
-- Current local next version: `v4.7.0`.
+- Current public tag: `v4.7.0`.
+- Current local next version: `v4.8.0`.
 - Historical standalone baseline: `v4.0.0`.
 - Suggested topics: `ai-coding`, `token-usage`, `cost-tracking`, `local-first`, `privacy-first`, `roi`, `codex-cli`, `claude-code`.
 - Release notes should say cost is official public token-price conversion, not a provider invoice.
@@ -37,5 +37,9 @@ git diff --check
 
 ## npm
 
+- Primary package name: `token-studio`.
+- Fallback package name if unavailable: `tokenroi`.
+- Primary one-command demo: `npx token-studio demo`.
 - Do not publish until `npm pack --dry-run` shows no SQLite databases, logs, `.env`, `.claude`, `.codex`, `dist`, or `node_modules`.
-- If the package name is unavailable, keep GitHub clone instructions as the primary install path.
+- If the package name is unavailable, publish the fallback only after updating README, package metadata, and release notes consistently.
+- `npm whoami` must succeed before running `npm publish --access public`.

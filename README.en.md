@@ -2,34 +2,38 @@
 
 **English** | [中文](README.md)
 
-Token Studio ROI is a local, privacy-first **Local AI Coding ROI Studio**. It does more than count tokens: it connects local AI coding usage to projects, tasks, work stages, outputs, and model strategy.
+**Local AI Coding ROI Studio.** Token Studio ROI is a local, privacy-first AI coding review tool. It does more than count tokens: it connects official-price token usage to projects, tasks, work stages, output evidence, and model strategy.
 
-It helps answer:
+```bash
+npx token-studio demo
+```
 
-- Where did AI coding tokens go?
-- Which sessions produced PRs, commits, articles, deployments, or docs?
-- Which work should use light, mid, or heavy models next week?
+Remember three differences:
+
+- **Work Evidence**: see where tokens went and which project/task/stage/output they belong to.
+- **Savings Simulator**: simulate model-switching savings with official public token prices.
+- **Model Policy**: turn usage history into next week's light/mid/heavy model strategy.
 
 By default it does not read, display, or upload conversation content. Real collection requires explicit confirmation.
 
-## Why Different
+## Why Not ccusage / CodeBurn?
 
-| Project | Focus | Token Studio ROI difference |
+| Tool | Strength | Token Studio ROI difference |
 |---|---|---|
-| ccusage | Multi-tool AI coding usage and cost reports | Token Studio ROI focuses on work attribution, output evidence, and model policy |
-| CodeBurn | Local multi-agent cost tracking/TUI | Token Studio ROI focuses on review workflows and exportable ROI evidence |
-| token-dashboard | Claude Code cost details, tool/file heatmaps | Token Studio ROI keeps a stricter privacy boundary and stores only metadata, hashes, and file types |
-| Claude Code Usage Monitor | Burn rate and live quota monitoring | Token Studio ROI adds custom budget windows and connects guardrails to ROI action review |
+| ccusage | Broad coverage and mature JSON output | Token Studio ROI uses the bridge for coverage, then focuses on outputs and review |
+| CodeBurn | `npx` TUI and local cost observation | Token Studio ROI focuses on weekly reports, action loops, and model policy |
+| TokenTracker / CodexBar | Desktop visibility and quota surfaces | Token Studio ROI focuses on local ROI decisions and work evidence |
 
 See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller competitor reference and differentiation notes.
 
 ## What Makes ROI Different?
 
-v4.7 focuses on decisions, not only metering, and uses a small CLI bridge, quota profiles, and statusline integrations to close coverage and live-entry gaps without turning Token Studio into a desktop widget or TUI clone:
+v4.8 focuses on decisions, not only metering, and uses npm one-command launch, Source Health, a small CLI bridge, quota profiles, and statusline integrations to close coverage and live-entry gaps without turning Token Studio into a desktop widget or TUI clone:
 
 - **ROI Savings Simulator**: compares official-price model switching scenarios for exploration, testing, context prep, low-value, and abandoned work.
 - **ccusage JSON Import**: imports documented ccusage JSON output for broader structured usage coverage while recomputing costs with Token Studio official pricing.
 - **ccusage CLI Bridge UX**: the Dashboard only generates copyable local commands; the browser never runs external scanners.
+- **Source Health Center**: shows native stable, experimental, detected-only, and ccusage import-bridge status, recent usage, token-field trust, and privacy boundaries without exposing full local paths.
 - **Import / Budget Wizard**: paste or upload ccusage JSON in the Dashboard, dry-run first, inspect shape/session/event counts, unsafe fields, and unpriced models, then explicitly apply to SQLite.
 - **Quota Profiles v2**: supports rolling/fixed custom guardrail windows, reset anchors, warning thresholds, burn projection, reset countdown, and near/over/exceeded warnings on `/live`.
 - **Statusline Guardrails**: `token-studio statusline` prints recent-window tokens, burn rate, cache, budget usage, unpriced-model warnings, and open actions for terminal prompts, tmux, or Claude Code statusline.
@@ -45,52 +49,34 @@ All dollar values are official-price conversions or simulations, not provider in
 Recommended Node.js: 24. Minimum: `>=22.12.0`.
 
 ```bash
+npx token-studio demo
+```
+
+Expected output:
+
+```text
+[demo] seeded 3 sessions and 2 daily rows into .../data/demo.sqlite
+[token-studio] UI  http://127.0.0.1:5173/  (Demo Mode)
+[token-studio] API http://127.0.0.1:4173
+```
+
+Common commands:
+
+```bash
+npx token-studio start
+npx token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes
+npx token-studio statusline --format=text
+npx token-studio collectors
+npx token-studio privacy-check
+```
+
+From source:
+
+```bash
 git clone https://github.com/RyanCoreAI/token-studio-roi.git
 cd token-studio-roi
 npm install
 npm run demo
-```
-
-CLI:
-
-```bash
-node src/cli.mjs demo
-node src/cli.mjs start
-node src/cli.mjs open
-node src/cli.mjs live
-node src/cli.mjs collectors
-node src/cli.mjs collectors --audit --json
-node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
-node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --yes
-node src/cli.mjs import-usage --help
-node src/cli.mjs statusline --format=text
-node src/cli.mjs statusline --format=json --window-minutes=15
-node src/cli.mjs budget list
-node src/cli.mjs report --period=week --format=markdown
-node src/cli.mjs policy --format=agents-md
-node src/cli.mjs doctor
-node src/cli.mjs privacy-check
-```
-
-Target npm entry after publishing:
-
-```bash
-npx @ryan/token-studio-roi demo
-npx @ryan/token-studio-roi start
-npx @ryan/token-studio-roi open
-npx @ryan/token-studio-roi live
-npx @ryan/token-studio-roi collectors
-npx @ryan/token-studio-roi collectors --audit --json
-npx @ryan/token-studio-roi import-usage --format=ccusage-json --file ccusage.json --dry-run
-npx @ryan/token-studio-roi import-usage --format=ccusage-cli --report=session --dry-run --yes
-npx @ryan/token-studio-roi import-usage --help
-npx @ryan/token-studio-roi statusline --format=text
-npx @ryan/token-studio-roi budget list
-npx @ryan/token-studio-roi report --period=week --format=markdown
-npx @ryan/token-studio-roi policy --format=claude-md
-npx @ryan/token-studio-roi collect --sources=claude,codex
-npx @ryan/token-studio-roi doctor
-npx @ryan/token-studio-roi privacy-check
 ```
 
 `demo` uses synthetic data and does not scan real `.claude`, `.codex`, Cursor, or Copilot logs. `start` reads an existing SQLite database and does not collect automatically. The `ccusage-cli` bridge explicitly runs the external ccusage local scanner; Token Studio only accepts structured JSON, rejects conversation-like fields, and ignores third-party cost fields.
@@ -110,7 +96,7 @@ These screenshots are from demo mode or sanitized synthetic data, not real local
 Real collection requires explicit confirmation:
 
 ```bash
-node src/cli.mjs collect --sources=claude,codex
+npx token-studio collect --sources=claude,codex
 ```
 
 Non-interactive shells refuse collection unless `--yes` is passed.
@@ -128,6 +114,7 @@ Non-interactive shells refuse collection unless `--yes` is passed.
 - Advisor Action Loop: add recommendations to an action list, mark them done or dismissed, and review trends without claiming causal savings.
 - Model Policy / ROI Playbook export: generates Markdown, Claude Code, or AGENTS-style strategy snippets from local structured history without writing files.
 - ccusage Import Bridge: `token-studio import-usage --format=ccusage-json` imports saved structured JSON, and `--format=ccusage-cli` explicitly invokes ccusage CLI; both avoid conversation content and third-party cost estimates.
+- Source Health Center: the Dashboard and `/api/source-health` show support tier, detected status, recent import/collection summary, and token-field trust without leaking full local paths.
 - Import / Budget Wizard: dashboard entry for ccusage JSON dry-run/apply, ccusage CLI Bridge command generation, and budget-window creation.
 - Quota Profiles v2: source-level custom token/cost guardrails with rolling/fixed windows, reset anchors, warning thresholds, and near/over/exceeded warnings.
 - Live Monitor: `/live` shows recent 15-minute token, model, cache, burn-rate metadata, budget windows, and guardrail warnings.
@@ -169,6 +156,7 @@ Stable interfaces:
 
 - `GET /api/data`
 - `GET /api/collectors`
+- `GET /api/source-health`
 - `GET /api/live`
 - `GET /api/budget-profiles`
 - `POST /api/budget-profiles`

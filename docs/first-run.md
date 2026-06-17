@@ -5,11 +5,17 @@ This guide gets a new user from an empty checkout to a useful ROI review in abou
 ## 1. Start Safely With Demo Data
 
 ```bash
-npm install
-npm run demo
+npx token-studio demo
 ```
 
 Demo mode uses synthetic data and does not scan `.claude`, `.codex`, Cursor, Copilot, or any other local AI logs.
+
+From a cloned repository, use:
+
+```bash
+npm install
+npm run demo
+```
 
 ## 2. Try The Import Flow Without Writing
 
@@ -22,13 +28,13 @@ Only click **Apply 写入 SQLite** after the dry-run looks correct. Apply create
 CLI equivalent:
 
 ```bash
-node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
+npx token-studio import-usage --format=ccusage-json --file ccusage.json --dry-run
 ```
 
 If you already use ccusage and want Token Studio to invoke it for you, use the explicit bridge:
 
 ```bash
-node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --yes
+npx token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes
 ```
 
 This runs `ccusage session --json --no-cost` through the configured bridge. Token Studio rejects conversation-like fields, ignores ccusage cost fields, and only writes SQLite when you switch from `--dry-run` to `--apply`.
@@ -66,8 +72,8 @@ The first useful action is usually to add one or two recommendations to the acti
 For a compact live guardrail in a terminal prompt, tmux bar, or Claude Code statusline:
 
 ```bash
-node src/cli.mjs statusline --format=text --window-minutes=15
-node src/cli.mjs statusline --format=json --window-minutes=15
+npx token-studio statusline --format=text --window-minutes=15
+npx token-studio statusline --format=json --window-minutes=15
 ```
 
 The statusline command only reads SQLite. It does not scan logs or start a background process. Copyable Claude Code, tmux, and PowerShell snippets are in [statusline.md](statusline.md).
@@ -77,9 +83,9 @@ The statusline command only reads SQLite. It does not scan logs or start a backg
 Export a model-use playbook without editing `CLAUDE.md`, `AGENTS.md`, or project files:
 
 ```bash
-node src/cli.mjs policy --format=markdown
-node src/cli.mjs policy --format=claude-md
-node src/cli.mjs policy --format=agents-md
+npx token-studio policy --format=markdown
+npx token-studio policy --format=claude-md
+npx token-studio policy --format=agents-md
 ```
 
 Use the output as a review artifact or copy the relevant section manually into your local project rules.

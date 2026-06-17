@@ -5,13 +5,13 @@
 ## Basic Command
 
 ```bash
-node src/cli.mjs statusline --format=text --window-minutes=15 --max-width=100
+npx token-studio statusline --format=text --window-minutes=15 --max-width=100
 ```
 
 For script usage:
 
 ```bash
-node src/cli.mjs statusline --format=json --window-minutes=15
+npx token-studio statusline --format=json --window-minutes=15
 ```
 
 ## Claude Code Statusline
@@ -19,23 +19,25 @@ node src/cli.mjs statusline --format=json --window-minutes=15
 Use the same text command as your statusline command:
 
 ```bash
-node /path/to/token-studio-roi/src/cli.mjs statusline --format=text --window-minutes=15 --max-width=100
+npx token-studio statusline --format=text --window-minutes=15 --max-width=100
 ```
 
 ## tmux
 
 ```tmux
-set -g status-right "#(node /path/to/token-studio-roi/src/cli.mjs statusline --format=text --window-minutes=15 --max-width=80)"
+set -g status-right "#(npx token-studio statusline --format=text --window-minutes=15 --max-width=80)"
 ```
 
 ## PowerShell Prompt
 
 ```powershell
 function prompt {
-  $ts = node D:\path\token-studio-roi\src\cli.mjs statusline --format=text --window-minutes=15 --max-width=80
+  $ts = npx token-studio statusline --format=text --window-minutes=15 --max-width=80
   "$ts PS $($PWD)> "
 }
 ```
+
+From a cloned repository, replace `npx token-studio` with `node src/cli.mjs`.
 
 ## Output Meaning
 

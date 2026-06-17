@@ -9,15 +9,15 @@ import {
 test('ccusage bridge command builder only emits explicit local CLI commands', () => {
   assert.equal(
     buildCcusageBridgeCommand({ report: 'blocks' }),
-    'node src/cli.mjs import-usage --format=ccusage-cli --report=blocks --dry-run --yes'
+    'npx token-studio import-usage --format=ccusage-cli --report=blocks --dry-run --yes'
   );
   assert.equal(
     buildCcusageBridgeCommand({ report: 'weekly', apply: true }),
-    'node src/cli.mjs import-usage --format=ccusage-cli --report=weekly --apply --yes'
+    'npx token-studio import-usage --format=ccusage-cli --report=weekly --apply --yes'
   );
   assert.equal(
     buildCcusageBridgeCommand({ report: 'unknown' }),
-    'node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --yes'
+    'npx token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes'
   );
 });
 

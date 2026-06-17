@@ -12,7 +12,7 @@ export function buildCcusageBridgeCommand({ report = 'session', apply = false } 
     ? String(report).toLowerCase()
     : 'session';
   return [
-    'node src/cli.mjs import-usage',
+    'npx token-studio import-usage',
     '--format=ccusage-cli',
     `--report=${normalized}`,
     apply ? '--apply' : '--dry-run',

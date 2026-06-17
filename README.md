@@ -2,32 +2,38 @@
 
 [English](README.en.md) | **中文**
 
-Token Studio ROI 是一个本地隐私优先的 **Local AI Coding ROI Studio**：它不只记录 token 和官方价换算成本，还把 AI 编程用量归因到项目、任务、工作阶段、产出和模型策略，帮助你回答：
+**Local AI Coding ROI Studio.** Token Studio ROI 不只是 token meter，而是一个本地隐私优先的 AI 编程复盘工具：记录 token 和官方价换算成本，连接项目、任务、工作阶段、产出证据和模型策略。
 
-- token 花在哪些项目和任务上？
-- 哪些 session 真的形成了 PR、commit、文章、部署或文档产出？
-- 下周应该用轻量、中等还是重模型，才能用有限 token 做更高 ROI 的事？
+```bash
+npx token-studio demo
+```
+
+首屏只需要记住三个差异：
+
+- **Work Evidence**：回答 token 花在哪、对应什么项目/任务/阶段/产出。
+- **Savings Simulator**：按官方公开 token 价格模拟模型切换后的节省空间。
+- **Model Policy**：把历史用量转成下周轻量/中等/重模型使用策略。
 
 默认不读取、不展示、不上传对话正文。真实采集必须显式确认。
 
-## Why Different
+## Why Not ccusage / CodeBurn?
 
-| 项目 | 重点 | Token Studio ROI 的差异 |
+| 工具 | 强项 | Token Studio ROI 的差异 |
 |---|---|---|
-| ccusage | 多 AI coding CLI 用量和成本统计 | Token Studio ROI 重点做工作归因、产出证据和模型策略 |
-| CodeBurn | 多 agent 本地成本/TUI | Token Studio ROI 重点做可导出的复盘报告和 ROI evidence |
-| token-dashboard | Claude Code 细粒度成本、tool/file heatmap | Token Studio ROI 保持隐私边界，只保存 metadata/hash/文件类型，不保存正文 |
-| Claude Code Usage Monitor | burn rate 和实时额度监控 | Token Studio ROI 用自定义预算窗口补 live guardrails，并把结果接到 ROI 行动闭环 |
+| ccusage | 覆盖广、JSON 输出成熟 | Token Studio ROI 用 ccusage bridge 补覆盖，但重点做产出和复盘 |
+| CodeBurn | `npx` TUI 和本地成本观测 | Token Studio ROI 做周报、行动闭环和模型策略 |
+| TokenTracker / CodexBar | 桌面组件、限额可见性 | Token Studio ROI 做本地 ROI 决策和工作证据 |
 
 更完整的竞品参考和差异化记录见 [docs/competitive-notes.md](docs/competitive-notes.md)。
 
 ## What Makes ROI Different?
 
-Token Studio ROI 的 v4.7 重点不是再堆一个 token meter，而是把统计结果转成可执行决策，并用最小 CLI bridge、quota profiles 和 statusline integration 补齐竞品的覆盖面和实时入口：
+Token Studio ROI 的 v4.8 重点不是再堆一个 token meter，而是把统计结果转成可执行决策，并用 npm 一键启动、Source Health、CLI bridge、quota profiles 和 statusline integration 补齐竞品的覆盖面和实时入口：
 
 - **ROI Savings Simulator**：模拟“探索、测试、上下文整理、低价值或废弃任务从重模型切到轻量/中模型”时，按官方公开 token 价格可能少花多少。
 - **ccusage JSON Import**：兼容 ccusage documented JSON output，借它的多源生态导入结构化 token 数据，但成本仍由 Token Studio 官方价函数重算。
 - **ccusage CLI Bridge UX**：Dashboard 只生成可复制命令，不从浏览器运行外部扫描器；真实 bridge 仍由用户在本地终端显式执行。
+- **Source Health Center**：显示 native stable、experimental、detected-only、ccusage import-bridge 的状态、最近用量、token 字段可信度和隐私边界，不输出完整本机路径。
 - **Import / Budget Wizard**：在 Dashboard 里粘贴或上传 ccusage JSON，先 dry-run 看 shape、session/event 数、unsafe 字段和未定价模型，确认后才写 SQLite。
 - **Quota Profiles v2**：支持 rolling/fixed 自定义限额窗口、reset anchor、warning threshold，在 `/live` 看到 burn projection、reset countdown 和 near/over/exceeded warnings。
 - **Statusline Guardrails**：`token-studio statusline` 输出最近窗口 token、burn rate、cache、预算使用率、未定价模型提示和 open actions，适配终端 prompt、tmux 或 Claude Code statusline。
@@ -43,52 +49,34 @@ Token Studio ROI 的 v4.7 重点不是再堆一个 token meter，而是把统计
 推荐 Node.js 24，最低 Node.js `>=22.12.0`。
 
 ```bash
+npx token-studio demo
+```
+
+预期输出类似：
+
+```text
+[demo] seeded 3 sessions and 2 daily rows into .../data/demo.sqlite
+[token-studio] UI  http://127.0.0.1:5173/  (Demo Mode)
+[token-studio] API http://127.0.0.1:4173
+```
+
+常用命令：
+
+```bash
+npx token-studio start
+npx token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes
+npx token-studio statusline --format=text
+npx token-studio collectors
+npx token-studio privacy-check
+```
+
+从源码运行：
+
+```bash
 git clone https://github.com/RyanCoreAI/token-studio-roi.git
 cd token-studio-roi
 npm install
 npm run demo
-```
-
-或通过 CLI：
-
-```bash
-node src/cli.mjs demo
-node src/cli.mjs start
-node src/cli.mjs open
-node src/cli.mjs live
-node src/cli.mjs collectors
-node src/cli.mjs collectors --audit --json
-node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
-node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --yes
-node src/cli.mjs import-usage --help
-node src/cli.mjs statusline --format=text
-node src/cli.mjs statusline --format=json --window-minutes=15
-node src/cli.mjs budget list
-node src/cli.mjs report --period=week --format=markdown
-node src/cli.mjs policy --format=agents-md
-node src/cli.mjs doctor
-node src/cli.mjs privacy-check
-```
-
-发布到 npm 后的目标入口：
-
-```bash
-npx @ryan/token-studio-roi demo
-npx @ryan/token-studio-roi start
-npx @ryan/token-studio-roi open
-npx @ryan/token-studio-roi live
-npx @ryan/token-studio-roi collectors
-npx @ryan/token-studio-roi collectors --audit --json
-npx @ryan/token-studio-roi import-usage --format=ccusage-json --file ccusage.json --dry-run
-npx @ryan/token-studio-roi import-usage --format=ccusage-cli --report=session --dry-run --yes
-npx @ryan/token-studio-roi import-usage --help
-npx @ryan/token-studio-roi statusline --format=text
-npx @ryan/token-studio-roi budget list
-npx @ryan/token-studio-roi report --period=week --format=markdown
-npx @ryan/token-studio-roi policy --format=claude-md
-npx @ryan/token-studio-roi collect --sources=claude,codex
-npx @ryan/token-studio-roi doctor
-npx @ryan/token-studio-roi privacy-check
 ```
 
 `demo` 使用合成数据，不扫描真实 `.claude`、`.codex`、Cursor 或 Copilot 日志。`start` 只读取已有 SQLite，不自动采集。`ccusage-cli` bridge 会显式运行外部 ccusage 本地扫描器；Token Studio 只接收结构化 JSON，拒绝 conversation-like 字段，并忽略第三方 cost 字段。
@@ -108,7 +96,7 @@ npx @ryan/token-studio-roi privacy-check
 真实采集需要显式确认：
 
 ```bash
-node src/cli.mjs collect --sources=claude,codex
+npx token-studio collect --sources=claude,codex
 ```
 
 非交互环境不会自动扫描本机日志；需要显式 `--yes` 才会继续。
@@ -126,6 +114,7 @@ node src/cli.mjs collect --sources=claude,codex
 - Advisor Action Loop：把建议加入行动清单、标为完成或忽略；只做趋势复盘，不声称因果节省。
 - Model Policy / ROI Playbook：导出 Markdown、Claude Code 或 AGENTS 风格策略片段，把历史用量转成下周模型使用策略，不自动写文件。
 - ccusage Import Bridge：`token-studio import-usage --format=ccusage-json` 导入保存的结构化 JSON，`--format=ccusage-cli` 显式调用 ccusage CLI；两者都不保存正文，不采用第三方估算成本。
+- Source Health Center：Dashboard 和 `/api/source-health` 展示来源支持级别、检测状态、最近导入/采集摘要和 token 字段可信度，不泄露完整本机路径。
 - Import / Budget Wizard：Dashboard 内置 ccusage JSON dry-run/apply、ccusage CLI Bridge 命令生成器和预算窗口创建入口。
 - Quota Profiles v2：自定义 source 级 token/cost 预算窗口，支持 rolling/fixed、reset anchor 和 warning threshold，`/live` 显示 near/over/exceeded warnings。
 - Live Monitor：`/live` 轻量监控最近 15 分钟 token、模型、cache、burn rate、预算窗口和 guardrail warnings。
@@ -167,6 +156,7 @@ npm run privacy:check
 
 - `GET /api/data`
 - `GET /api/collectors`
+- `GET /api/source-health`
 - `GET /api/live`
 - `GET /api/budget-profiles`
 - `POST /api/budget-profiles`

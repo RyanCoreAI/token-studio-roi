@@ -59,6 +59,7 @@ import { runPrivacyCheck } from './privacy-check.mjs';
 import { buildModelPolicy, formatModelPolicyMarkdown } from './model-policy.mjs';
 import { buildLiveSnapshot } from './live.mjs';
 import { applyCcusageImport, parseCcusageJsonText, planCcusageImport } from './ccusage-import.mjs';
+import { buildSourceHealth } from './source-health.mjs';
 
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || process.env.BIND_HOST || '127.0.0.1';
@@ -290,7 +291,8 @@ function handleApi(req, url, res) {
         projectAliasMatchTypes: PROJECT_ALIAS_MATCH_TYPES,
         projectAliasRules: aliasRules,
         demoMode: process.env.TOKEN_STUDIO_DEMO_MODE === '1',
-        officialPricing: officialPricingMetadata(daily)
+        officialPricing: officialPricingMetadata(daily),
+        sourceHealth: sourceHealth()
       },
       daily,
       sessions: pricedSessions,
@@ -308,7 +310,13 @@ function handleApi(req, url, res) {
     return;
   }
   if (url.pathname === '/api/collectors' && req.method === 'GET') {
-    sendJson(res, { collectors: detectCollectors() });
+    const collectors = detectCollectors();
+    sendJson(res, { collectors, sourceHealth: sourceHealth(collectors) });
+    return;
+  }
+  if (url.pathname === '/api/source-health' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '来源健康接口')) return;
+    sendJson(res, { sources: sourceHealth() });
     return;
   }
   if (url.pathname === '/api/budget-profiles' && req.method === 'GET') {
@@ -966,6 +974,41 @@ function liveTokenEvents() {
     ORDER BY timestamp DESC
     LIMIT 500
   `);
+}
+
+function sourceHealth(collectors = detectCollectors()) {
+  return buildSourceHealth({
+    collectors,
+    dailyRows: all(`
+      SELECT source,
+        COUNT(*) AS count,
+        COALESCE(SUM(total_tokens), 0) AS totalTokens,
+        MAX(usage_date) AS latestDailyAt
+      FROM daily_usage
+      GROUP BY source
+    `),
+    sessionRows: all(`
+      SELECT source,
+        COUNT(*) AS count,
+        COALESCE(SUM(total_tokens), 0) AS totalTokens,
+        MAX(last_activity) AS latestSessionAt
+      FROM session_usage
+      GROUP BY source
+    `),
+    eventRows: all(`
+      SELECT source,
+        COUNT(*) AS count,
+        COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens + reasoning_tokens), 0) AS totalTokens,
+        MAX(timestamp) AS latestEventAt
+      FROM token_events
+      GROUP BY source
+    `),
+    runs: all(`
+      SELECT source, status, collected_at AS collectedAt
+      FROM collection_runs
+      ORDER BY id DESC
+    `)
+  });
 }
 
 function buildAutoAttributionContext() {

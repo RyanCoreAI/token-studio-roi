@@ -743,6 +743,9 @@ function Dashboard({
       <FirstRunPanel
         state={firstRunState}
         onOpenImportBudget={() => setImportBudgetOpen(true)} />
+      <SourceHealthPanel
+        rows={M.meta?.sourceHealth || []}
+        onOpenImportBudget={() => setImportBudgetOpen(true)} />
 
       {/* KPI row */}
       <div className="kpi-row">
@@ -957,6 +960,76 @@ function FirstRunPanel({ state, onOpenImportBudget }) {
         </div>
       )}
     </section>
+  );
+}
+
+function SourceHealthPanel({ rows = [], onOpenImportBudget }) {
+  if (!rows.length) return null;
+  const groups = {
+    stable: rows.filter(row => row.supportStatus === 'stable').length,
+    experimental: rows.filter(row => row.supportStatus === 'experimental').length,
+    importOnly: rows.filter(row => row.supportStatus === 'import-only').length,
+    detectedOnly: rows.filter(row => row.supportStatus === 'detected-only').length
+  };
+  const activeRows = rows.filter(row => row.detected || row.sessions || row.tokenEvents || row.dailyRows || row.supportStatus === 'import-only');
+  const visibleRows = [
+    ...activeRows,
+    ...rows.filter(row => !activeRows.includes(row)).slice(0, Math.max(0, 8 - activeRows.length))
+  ].slice(0, 10);
+
+  return (
+    <section className="source-health-panel" aria-label="Source Health Center">
+      <div className="source-health-head">
+        <div>
+          <div className="eyebrow">Source Health Center</div>
+          <h2>覆盖面靠 ccusage bridge 拉齐，事实用量只认可靠 token 字段</h2>
+          <p>显示 native stable、experimental、detected-only 和 import-bridge 的状态；这里不读取正文，也不暴露本机完整路径。</p>
+        </div>
+        <div className="source-health-actions">
+          <button className="btn btn-primary" onClick={onOpenImportBudget}>生成 ccusage 命令</button>
+          <a className="btn" href="/live">看实时限额</a>
+        </div>
+      </div>
+      <div className="source-health-stats">
+        <SourceHealthStat label="Stable" value={groups.stable} />
+        <SourceHealthStat label="Experimental" value={groups.experimental} />
+        <SourceHealthStat label="Import bridge" value={groups.importOnly} />
+        <SourceHealthStat label="Detected-only" value={groups.detectedOnly} />
+      </div>
+      <div className="source-health-grid">
+        {visibleRows.map(row => (
+          <article key={row.id} className={`source-health-card status-${row.supportStatus} health-${row.health}`}>
+            <div className="source-health-card-top">
+              <strong>{row.label}</strong>
+              <span>{row.coverageTier}</span>
+            </div>
+            <div className="source-health-card-meta">
+              <span>{row.detected ? 'detected' : 'not detected'}</span>
+              <span>{row.readsConversationContent ? 'reads content' : 'no transcript'}</span>
+              <span>{row.tokenReliability}</span>
+            </div>
+            <div className="source-health-card-counts">
+              <b>{U.compactCN(row.sessions || 0)}</b>
+              <span>sessions</span>
+              <b>{U.compactCN(row.tokenEvents || 0)}</b>
+              <span>events</span>
+              <b>{U.compactCN(row.totalTokens || 0)}</b>
+              <span>tokens</span>
+            </div>
+            <code>{row.commandHint}</code>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SourceHealthStat({ label, value }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 

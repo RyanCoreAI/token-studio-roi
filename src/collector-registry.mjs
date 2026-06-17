@@ -85,19 +85,19 @@ export const COLLECTOR_REGISTRY = [
     module: './collectors/qwen.mjs',
     privacyLevel: 'metadata-only',
     roots: () => configuredPaths('qwen', 'roots', ['~/.qwen', '~/.qwen-code']),
-    note: 'Experimental: supports fixture-backed structured usage logs without transcript ingestion.'
+    note: 'Experimental: supports fixture-backed structured usage logs without message-body ingestion.'
   }),
   experimentalCollector('kimi', 'Kimi / Moonshot Coding CLI', {
     module: './collectors/kimi.mjs',
     privacyLevel: 'metadata-only',
     roots: () => configuredPaths('kimi', 'roots', ['~/.kimi', '~/.moonshot']),
-    note: 'Experimental: supports fixture-backed structured usage logs without transcript ingestion.'
+    note: 'Experimental: supports fixture-backed structured usage logs without message-body ingestion.'
   }),
   experimentalCollector('goose', 'Goose', {
     module: './collectors/goose.mjs',
     privacyLevel: 'metadata-only',
     roots: () => configuredPaths('goose', 'roots', ['~/.config/goose', '~/.goose']),
-    note: 'Experimental: supports explicit token metadata only; no prompt or response text is imported.'
+    note: 'Experimental: supports explicit token metadata only; message bodies are not imported.'
   }),
   importOnlyCollector('ccusage', 'ccusage Import Bridge', {
     roots: () => configuredPaths('ccusage', 'roots', []),

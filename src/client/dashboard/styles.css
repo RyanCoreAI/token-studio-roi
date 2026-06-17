@@ -1065,6 +1065,172 @@ button, input, select { font-family: inherit; color: inherit; }
   background: color-mix(in oklab, var(--c-indigo), transparent 94%);
 }
 
+/* ─── Source health center ───────────────────────────────── */
+
+.source-health-panel {
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.source-health-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.source-health-head h2 {
+  margin: 3px 0 5px;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.source-health-head p {
+  max-width: 820px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.source-health-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.source-health-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.source-health-stats div,
+.source-health-card {
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface), var(--bg) 26%);
+}
+
+.source-health-stats div {
+  padding: 9px 10px;
+}
+
+.source-health-stats span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.source-health-stats strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 18px;
+}
+
+.source-health-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.source-health-card {
+  min-width: 0;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.source-health-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.source-health-card-top strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.source-health-card-top span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.source-health-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.source-health-card-meta span {
+  padding: 2px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 10.5px;
+}
+
+.source-health-card-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px 6px;
+  align-items: end;
+}
+
+.source-health-card-counts b,
+.source-health-card-counts span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-health-card-counts b {
+  font-size: 14px;
+}
+
+.source-health-card-counts span {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.source-health-card code {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.source-health-card.status-import-only {
+  border-color: color-mix(in oklab, var(--c-indigo), transparent 70%);
+}
+
+.source-health-card.health-has-data {
+  background: color-mix(in oklab, var(--good), transparent 94%);
+}
+
 /* ─── Grid ────────────────────────────────────────────────── */
 
 .grid {
@@ -2314,6 +2480,15 @@ table.dt input[type="checkbox"] {
   }
   .first-run-actions {
     justify-content: flex-start;
+  }
+  .source-health-head,
+  .source-health-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .source-health-stats,
+  .source-health-grid {
+    grid-template-columns: 1fr;
   }
   .first-run-notices button {
     align-items: flex-start;
