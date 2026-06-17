@@ -4,10 +4,10 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { createServer } from 'node:net';
-import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { hostname } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { seedDemoDatabase } from './demo-seed.mjs';
 import { auditExperimentalCollectors, detectCollectors } from './collector-registry.mjs';
 import { CCUSAGE_CLI_REPORTS, ccusageInvocation, runCcusageCliImportPlan } from './ccusage-bridge.mjs';
@@ -17,12 +17,14 @@ import { formatPrivacyCheckReport, runPrivacyCheck } from './privacy-check.mjs';
 import { buildTerminalReport, formatTerminalReport } from './terminal-report.mjs';
 import { buildEmptyStatuslineSnapshot, buildStatuslineSnapshot, formatStatuslineText } from './statusline.mjs';
 import { buildModelPolicy, formatModelPolicy } from './model-policy.mjs';
+import { resolveViteBin } from './runtime-paths.mjs';
 
 const command = process.argv[2] || 'help';
 const args = parseArgs(process.argv.slice(3));
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(SOURCE_DIR, '..');
 const USER_CWD = process.cwd();
+const requireFromCli = createRequire(import.meta.url);
 
 try {
   if (command === 'start') {
@@ -81,10 +83,7 @@ async function startCommand({ demo = false, dbPath = null, route = '/', openBrow
     DB_PATH: dbPath || resolve(USER_CWD, args.db || process.env.DB_PATH || 'data/usage.sqlite'),
     TOKEN_STUDIO_DEMO_MODE: demo ? '1' : process.env.TOKEN_STUDIO_DEMO_MODE || ''
   };
-  const viteBin = resolve(PACKAGE_ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
-  if (!existsSync(viteBin)) {
-    throw new Error('Vite is not installed. Run npm install first, then retry token-studio start.');
-  }
+  const viteBin = resolveViteBin({ packageRoot: PACKAGE_ROOT, requireLike: requireFromCli });
   const server = spawn(process.execPath, [resolve(SOURCE_DIR, 'server.mjs')], {
     cwd: PACKAGE_ROOT,
     env,

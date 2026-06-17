@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.8.1
+
+- Fixed `npx token-studio demo/start` when npm hoists `vite` beside the package instead of inside `token-studio/node_modules`.
+- Added runtime path tests for npm/npx hoisted dependency layout and local source checkout layout.
+
 ## 4.8.0
 
 - Renamed the npm package to `token-studio` with `npx token-studio demo` as the primary public entry.
