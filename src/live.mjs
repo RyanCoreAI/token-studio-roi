@@ -200,7 +200,7 @@ export function buildBudgetWindows({ rows = [], budgetProfiles = [], nowMs = Dat
         windowMinutes,
         windowStart: new Date(sinceMs).toISOString(),
         windowEnd: new Date(nowMs).toISOString(),
-        resetInMinutes: Math.max(0, Math.ceil((sinceMs + windowMs - nowMs) / 60000)),
+        resetInMinutes: Math.max(0, Math.ceil(windowMinutes - elapsedMinutes)),
         totalTokens: totals.totalTokens,
         costUSD: totals.costUSD,
         burnRateTokensPerHour,

@@ -99,9 +99,9 @@ export const COLLECTOR_REGISTRY = [
     roots: () => configuredPaths('goose', 'roots', ['~/.config/goose', '~/.goose']),
     note: 'Experimental: supports explicit token metadata only; no prompt or response text is imported.'
   }),
-  importOnlyCollector('ccusage', 'ccusage JSON Import', {
+  importOnlyCollector('ccusage', 'ccusage Import Bridge', {
     roots: () => configuredPaths('ccusage', 'roots', []),
-    note: 'Import-only: use token-studio import-usage --format=ccusage-json to ingest documented ccusage JSON output.'
+    note: 'Import-only: use token-studio import-usage --format=ccusage-json for saved JSON or --format=ccusage-cli for an explicit ccusage CLI bridge.'
   }),
   detectedOnlyCollector('amp', 'Amp', ['~/.config/amp', '~/.amp']),
   detectedOnlyCollector('droid', 'Droid', ['~/.droid', '~/.config/droid']),

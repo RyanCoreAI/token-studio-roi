@@ -40,6 +40,9 @@ export function parseCcusageJsonText(text) {
 export function planCcusageImport(payload, options = {}) {
   const device = cleanText(options.device, 120) || hostname();
   const now = options.now || new Date();
+  const importSource = cleanText(options.importSource, 80) || 'import:ccusage-json';
+  const command = cleanText(options.command, 240) || 'import-usage --format=ccusage-json';
+  const toolCategory = cleanText(options.toolCategory, 80) || importSource;
   const detectedShape = detectShape(payload);
   const rows = extractUsageRows(payload, detectedShape);
   if (!rows.length) {
@@ -114,7 +117,7 @@ export function planCcusageImport(payload, options = {}) {
         cacheReadTokens: tokens.cacheReadTokens,
         cacheCreationTokens: tokens.cacheCreationTokens,
         reasoningTokens: tokens.reasoningOutputTokens,
-        toolCategory: 'import:ccusage-json',
+        toolCategory,
         privacyLevel: 'safe'
       };
       eventsByKey.set(eventRow.eventId, eventRow);
@@ -130,11 +133,11 @@ export function planCcusageImport(payload, options = {}) {
     warnings: dedupeWarnings(warnings),
     run: {
       device,
-      source: 'import:ccusage-json',
+      source: importSource,
       status: 'ok',
       message: `shape=${detectedShape}, daily=${dailyByKey.size}, sessions=${sessionsByKey.size}, token_events=${eventsByKey.size}`,
       collectedAt: new Date(now).toISOString(),
-      command: 'import-usage --format=ccusage-json'
+      command
     }
   };
 }
@@ -164,9 +167,9 @@ function detectShape(payload) {
   if (payload?.projects && typeof payload.projects === 'object' && !Array.isArray(payload.projects)) return 'project-daily';
   if (Array.isArray(payload?.data) && payload.type) {
     const type = String(payload.type).toLowerCase();
-    if (['daily', 'session', 'blocks', 'monthly'].includes(type)) return type;
+    if (['daily', 'weekly', 'session', 'blocks', 'monthly'].includes(type)) return type;
   }
-  throw new Error('Unsupported ccusage JSON shape. Expected daily, project daily, session, blocks, or monthly output.');
+  throw new Error('Unsupported ccusage JSON shape. Expected daily, project daily, weekly, session, blocks, or monthly output.');
 }
 
 function extractUsageRows(payload, shape) {
@@ -268,14 +271,14 @@ function sourceFromRow(row) {
 }
 
 function usageDateFromRow(row) {
-  const raw = row.date || row.usageDate || row.month || row.blockStart || row.firstActivity || row.lastActivity;
+  const raw = row.date || row.usageDate || row.week || row.weekStart || row.startDate || row.month || row.blockStart || row.firstActivity || row.lastActivity;
   const date = parseDate(raw);
   if (!date) throw new Error('ccusage row is missing a usable date/month/activity field');
   return formatDate(date);
 }
 
 function timestampFromRow(row, usageDate, now) {
-  const raw = row.lastActivity || row.blockEnd || row.firstActivity || row.blockStart || row.date || row.month;
+  const raw = row.lastActivity || row.blockEnd || row.firstActivity || row.blockStart || row.date || row.week || row.weekStart || row.startDate || row.month;
   const date = parseDate(raw) || parseDate(usageDate) || new Date(now);
   return date.toISOString();
 }

@@ -44,9 +44,21 @@ v4.3 therefore prioritizes:
 - Terminal ROI report before a full TUI.
 - Collector matrix breadth with detected-only/import-only honesty before fake stable support.
 
+## v4.6 Bridge And Statusline Bet
+
+The remaining gap after v4.5 is not the browser review workflow; it is quick terminal access and broad source ingestion. ccusage already documents JSON reports for daily, weekly, monthly, session, and blocks, and it can be run directly with `npx ccusage@latest`. Token Studio ROI should not duplicate every collector immediately.
+
+v4.6 therefore adds:
+
+- ccusage CLI Bridge: run ccusage explicitly, request `--json --no-cost`, reject unsafe conversation-like fields, and recompute costs with Token Studio official-price logic.
+- Statusline Guardrails: a compact read-only summary for terminal prompt, tmux, or Claude Code statusline use.
+- No desktop widget, leaderboard, subscription-quota prediction, account system, or background daemon.
+
+This narrows the most visible competitive gap while keeping Token Studio ROI focused on work evidence, model strategy, and Advisor Actions.
+
 ## Remaining Gaps
 
-- Collector depth is still behind the broadest multi-tool products. v4.3 improves breadth through ccusage import and detected-only coverage, but stable verification remains narrower than ccusage or TokenTracker.
+- Collector depth is still behind the broadest multi-tool products. v4.6 improves breadth through ccusage JSON/CLI bridge and detected-only coverage, but Token Studio's own stable collectors remain narrower than ccusage or TokenTracker.
 - Live monitoring is intentionally lightweight; it is a guardrail for current burn rate, not an exact subscription predictor.
 - Desktop packaging is not included. Keep the public story focused on local browser + CLI first.
 - Automatic attribution is rule-based and should always display provenance and confidence.

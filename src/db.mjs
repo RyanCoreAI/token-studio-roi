@@ -1,5 +1,5 @@
-import { mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 export const defaultDbPath = resolve(process.cwd(), 'data', 'usage.sqlite');
@@ -47,6 +47,36 @@ export function openDb(dbPath = defaultDbPath) {
   db.exec('PRAGMA foreign_keys = ON');
   initSchema(db);
   return db;
+}
+
+export function openReadOnlyDb(dbPath = defaultDbPath) {
+  const resolved = resolve(dbPath);
+  if (!existsSync(resolved)) {
+    throw new Error(`SQLite database not found: ${resolved}`);
+  }
+  const db = new DatabaseSync(resolved, {
+    readOnly: true,
+    timeout: 10000
+  });
+  db.exec('PRAGMA busy_timeout = 10000');
+  return db;
+}
+
+export function createSqliteBackup(db, dbPath = defaultDbPath, { reason = 'manual', backupDir = null } = {}) {
+  const resolvedDbPath = resolve(dbPath);
+  if (!existsSync(resolvedDbPath)) {
+    throw new Error(`SQLite database not found: ${resolvedDbPath}`);
+  }
+  const createdAt = new Date().toISOString();
+  const stamp = createdAt.replace(/[:.]/g, '-');
+  const safeReason = String(reason || 'manual').replace(/[^a-z0-9-]+/gi, '-').toLowerCase();
+  const targetDir = backupDir || process.env.BACKUP_DIR || join(dirname(resolvedDbPath), 'backups');
+  mkdirSync(targetDir, { recursive: true });
+  db.exec('PRAGMA wal_checkpoint(FULL)');
+  const fileName = `usage-${stamp}-${safeReason}.sqlite`;
+  const backupPath = join(targetDir, fileName);
+  copyFileSync(resolvedDbPath, backupPath);
+  return { createdAt, path: backupPath, fileName };
 }
 
 function initSchema(db) {

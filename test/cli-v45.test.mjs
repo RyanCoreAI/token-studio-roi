@@ -9,7 +9,7 @@ test('CLI help exposes open and import-usage help', async () => {
 
   const importHelp = await runCli(['import-usage', '--help']);
   assert.equal(importHelp.code, 0, importHelp.stderr);
-  assert.match(importHelp.stdout, /ccusage JSON Import/);
+  assert.match(importHelp.stdout, /ccusage Import/);
   assert.match(importHelp.stdout, /--dry-run/);
   assert.match(importHelp.stdout, /prompt, response, messages/);
 });

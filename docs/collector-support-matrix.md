@@ -15,7 +15,7 @@ Token Studio ROI prefers trustworthy token metadata over broad but unreliable co
 | Qwen Code | experimental | explicit structured usage JSON/JSONL only | No | explicit token fields only | No |
 | Kimi / Moonshot Coding CLI | experimental | explicit structured usage JSON/JSONL only | No | explicit token fields only | No |
 | Goose | experimental | explicit structured usage JSON/JSONL only | No | explicit token fields only | No |
-| ccusage JSON | import-only | documented ccusage JSON output | No | external JSON token fields | No |
+| ccusage JSON / CLI Bridge | import-only | documented ccusage JSON output or explicit `ccusage --json --no-cost` bridge | No | external structured token fields | No |
 | Amp | detected-only | local path detection only | No | unknown; no usage import | No |
 | Droid | detected-only | local path detection only | No | unknown; no usage import | No |
 | Codebuff | detected-only | local path detection only | No | unknown; no usage import | No |
@@ -30,11 +30,13 @@ Token Studio ROI prefers trustworthy token metadata over broad but unreliable co
 
 Experimental collectors are opt-in. They skip records without explicit token fields and never infer usage from message text, prompts, responses, diffs, or full file paths.
 
-Import-only sources do not scan local logs. `ccusage` is supported through:
+Import-only sources are explicit. Saved ccusage JSON does not scan local logs. The CLI bridge runs ccusage as an external local scanner only after confirmation or `--yes`; Token Studio receives structured JSON, rejects conversation-like fields, and recomputes official-price costs:
 
 ```bash
 node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
 node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --apply
+node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --yes
+node src/cli.mjs import-usage --format=ccusage-cli --report=blocks --apply --yes
 ```
 
 Detected-only sources only report whether likely local paths exist. They do not write `daily_usage`, `session_usage`, or `token_events` until a later audit proves reliable token/model/time/session metadata.

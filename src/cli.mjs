@@ -9,10 +9,12 @@ import { resolve } from 'node:path';
 import { hostname } from 'node:os';
 import { seedDemoDatabase } from './demo-seed.mjs';
 import { auditExperimentalCollectors, detectCollectors } from './collector-registry.mjs';
+import { CCUSAGE_CLI_REPORTS, ccusageInvocation, runCcusageCliImportPlan } from './ccusage-bridge.mjs';
 import { applyCcusageImport, parseCcusageJsonText, planCcusageImport, readCcusageImportInput } from './ccusage-import.mjs';
-import { defaultDbPath, deleteBudgetProfile, listBudgetProfiles, openDb, upsertBudgetProfile } from './db.mjs';
+import { createSqliteBackup, defaultDbPath, deleteBudgetProfile, listBudgetProfiles, openDb, openReadOnlyDb, upsertBudgetProfile } from './db.mjs';
 import { formatPrivacyCheckReport, runPrivacyCheck } from './privacy-check.mjs';
 import { buildTerminalReport, formatTerminalReport } from './terminal-report.mjs';
+import { buildEmptyStatuslineSnapshot, buildStatuslineSnapshot, formatStatuslineText } from './statusline.mjs';
 
 const command = process.argv[2] || 'help';
 const args = parseArgs(process.argv.slice(3));
@@ -26,6 +28,8 @@ try {
     await demoCommand();
   } else if (command === 'live') {
     await startCommand({ demo: false, route: '/live' });
+  } else if (command === 'statusline') {
+    await statuslineCommand();
   } else if (command === 'collect') {
     await collectCommand();
   } else if (command === 'collectors') {
@@ -167,32 +171,28 @@ async function importUsageCommand() {
     printImportUsageHelp();
     return;
   }
-  if (args.format !== 'ccusage-json') {
-    throw new Error('import-usage currently supports --format=ccusage-json only.');
-  }
-  if (!args.file) {
-    throw new Error('import-usage requires --file <path|->.');
-  }
+  const format = args.format || 'ccusage-json';
   if (args.apply && args.dryRun) {
     throw new Error('Choose either --apply or --dry-run, not both.');
   }
-  const payload = parseCcusageJsonText(readCcusageImportInput(args.file));
-  const plan = planCcusageImport(payload, {
-    device: args.device || hostname()
-  });
+  const { plan, bridge } = await buildImportUsagePlan(format);
   const summary = {
     ok: true,
+    format,
     mode: args.apply ? 'apply' : 'dry-run',
     detectedShape: plan.detectedShape,
     daily: plan.daily.length,
     sessions: plan.sessions.length,
     tokenEvents: plan.tokenEvents.length,
-    warnings: plan.warnings
+    warnings: plan.warnings,
+    bridge: bridge || null
   };
 
   if (args.apply) {
-    const db = openCliDb();
+    const dbPath = cliDbPath();
+    const db = openDb(dbPath);
     try {
+      summary.backup = createSqliteBackup(db, dbPath, { reason: format === 'ccusage-cli' ? 'ccusage-cli-import' : 'ccusage-json-import' });
       summary.applied = applyCcusageImport(db, plan);
     } finally {
       db.close();
@@ -203,9 +203,57 @@ async function importUsageCommand() {
     console.log(JSON.stringify(summary, null, 2));
     return;
   }
-  console.log(`ccusage ${summary.mode}: shape=${summary.detectedShape}, daily=${summary.daily}, sessions=${summary.sessions}, token_events=${summary.tokenEvents}`);
+  const source = bridge ? `ccusage CLI ${bridge.report}` : 'ccusage JSON';
+  console.log(`${source} ${summary.mode}: shape=${summary.detectedShape}, daily=${summary.daily}, sessions=${summary.sessions}, token_events=${summary.tokenEvents}`);
+  if (summary.backup) console.log(`backup=${summary.backup.path}`);
   for (const warning of summary.warnings.slice(0, 5)) {
     console.log(`warning: ${warning.model || 'unknown'} — ${warning.reason}`);
+  }
+}
+
+async function buildImportUsagePlan(format) {
+  if (format === 'ccusage-json') {
+    if (!args.file) {
+      throw new Error('import-usage requires --file <path|-> for --format=ccusage-json.');
+    }
+    const payload = parseCcusageJsonText(readCcusageImportInput(args.file));
+    return {
+      plan: planCcusageImport(payload, {
+        device: args.device || hostname()
+      }),
+      bridge: null
+    };
+  }
+
+  if (format === 'ccusage-cli') {
+    const report = String(args.report || 'session').toLowerCase();
+    const invocation = ccusageInvocation({ report, ccusageBin: args.ccusageBin });
+    await ensureCcusageBridgeConfirmed({ report, commandLabel: invocation.commandLabel });
+    const { plan } = await runCcusageCliImportPlan({
+      report,
+      ccusageBin: args.ccusageBin,
+      device: args.device || hostname()
+    });
+    return {
+      plan,
+      bridge: {
+        report,
+        command: invocation.commandLabel
+      }
+    };
+  }
+
+  throw new Error('import-usage supports --format=ccusage-json or --format=ccusage-cli.');
+}
+
+async function ensureCcusageBridgeConfirmed({ report, commandLabel }) {
+  if (args.yes || process.env.TOKEN_STUDIO_CCUSAGE_BRIDGE_CONFIRMED === '1') return;
+  if (!process.stdin.isTTY) {
+    throw new Error('ccusage CLI bridge requires --yes in non-interactive shells because it runs an external local scanner.');
+  }
+  const confirmed = await confirmCcusageBridge({ report, commandLabel });
+  if (!confirmed) {
+    throw new Error('ccusage CLI bridge cancelled. No external scanner was run.');
   }
 }
 
@@ -268,6 +316,42 @@ async function reportCommand() {
   }
 }
 
+async function statuslineCommand() {
+  const format = args.format || 'text';
+  if (!['text', 'json'].includes(format)) {
+    throw new Error('statusline --format must be text or json.');
+  }
+  const windowMinutes = Number(args.windowMinutes || 15);
+  if (!Number.isFinite(windowMinutes) || windowMinutes <= 0) {
+    throw new Error('statusline --window-minutes must be a positive number.');
+  }
+  const snapshotOptions = {
+    windowMinutes,
+    source: args.source || 'all'
+  };
+  let db;
+  let snapshot;
+  try {
+    db = openCliReadOnlyDb();
+    snapshot = buildStatuslineSnapshot(db, snapshotOptions);
+  } catch (error) {
+    if (!/SQLite database not found/i.test(error.message)) throw error;
+    snapshot = buildEmptyStatuslineSnapshot({
+      ...snapshotOptions,
+      warning: 'Local SQLite database not found.'
+    });
+  } finally {
+    db?.close();
+  }
+  if (format === 'json') {
+    console.log(JSON.stringify(snapshot, null, 2));
+    return;
+  }
+  console.log(formatStatuslineText(snapshot, {
+    maxWidth: args.maxWidth || 100
+  }));
+}
+
 async function privacyCheckCommand() {
   const result = runPrivacyCheck({ includeUntracked: Boolean(args.includeUntracked) });
   console.log(formatPrivacyCheckReport(result));
@@ -288,6 +372,20 @@ async function confirmCollect(sources) {
   }
 }
 
+async function confirmCcusageBridge({ report, commandLabel }) {
+  const rl = createInterface({ input, output });
+  try {
+    console.log('This will run ccusage as an external local scanner and pass structured JSON to Token Studio.');
+    console.log(`Report: ${report}`);
+    console.log(`Command: ${commandLabel}`);
+    console.log('Token Studio rejects conversation-like fields and recomputes cost with its official-price table.');
+    const answer = await rl.question('Type CCUSAGE to continue: ');
+    return answer.trim() === 'CCUSAGE';
+  } finally {
+    rl.close();
+  }
+}
+
 async function freePort(start) {
   for (let port = Number(start); port < Number(start) + 80; port += 1) {
     if (await canListen(port)) return port;
@@ -296,7 +394,15 @@ async function freePort(start) {
 }
 
 function openCliDb() {
-  return openDb(resolve(process.cwd(), args.db || process.env.DB_PATH || defaultDbPath));
+  return openDb(cliDbPath());
+}
+
+function openCliReadOnlyDb() {
+  return openReadOnlyDb(cliDbPath());
+}
+
+function cliDbPath() {
+  return resolve(process.cwd(), args.db || process.env.DB_PATH || defaultDbPath);
 }
 
 function canListen(port) {
@@ -395,9 +501,11 @@ function printHelp() {
     '  token-studio start [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
     '  token-studio open [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
     '  token-studio live [--db data/usage.sqlite]',
+    '  token-studio statusline [--db data/usage.sqlite] [--window-minutes 15] [--format text|json]',
     '  token-studio collectors [--json]',
     '  token-studio collectors --audit [--json]',
     '  token-studio import-usage --format=ccusage-json --file <path|-> [--dry-run|--apply]',
+    '  token-studio import-usage --format=ccusage-cli --report=<daily|weekly|monthly|session|blocks> [--dry-run|--apply] [--yes]',
     '  token-studio budget list|set|delete',
     '  token-studio report --period=week --format=table|markdown|json',
     '  token-studio collect --sources claude,codex [--yes]',
@@ -408,7 +516,7 @@ function printHelp() {
 
 function printImportUsageHelp() {
   console.log([
-    'Token Studio ccusage JSON Import',
+    'Token Studio ccusage Import',
     '',
     'Default mode is dry-run. It validates shape and counts rows without writing SQLite.',
     '',
@@ -416,11 +524,19 @@ function printImportUsageHelp() {
     '  token-studio import-usage --format=ccusage-json --file ccusage.json --dry-run',
     '  token-studio import-usage --format=ccusage-json --file ccusage.json --apply',
     '  ccusage daily --json | token-studio import-usage --format=ccusage-json --file - --dry-run',
+    '  token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes',
+    '  token-studio import-usage --format=ccusage-cli --report=blocks --apply --yes',
+    '  token-studio import-usage --format=ccusage-cli --report=daily --ccusage-bin ccusage --dry-run',
     '',
     'Supported shapes:',
-    '  daily, project daily, session, blocks, monthly',
+    '  daily, project daily, weekly, session, blocks, monthly',
+    '',
+    'ccusage CLI bridge reports:',
+    `  ${CCUSAGE_CLI_REPORTS.join(', ')}`,
     '',
     'Privacy:',
-    '  prompt, response, messages, transcript, diff, content, and text fields are rejected.'
+    '  prompt, response, messages, transcript, diff, content, and text fields are rejected.',
+    '  ccusage-cli runs an external local scanner only after interactive confirmation or --yes.',
+    '  Imported cost fields are ignored; Token Studio recomputes official-price conversion.'
   ].join('\n'));
 }

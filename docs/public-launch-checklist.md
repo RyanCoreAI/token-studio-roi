@@ -28,8 +28,8 @@ git diff --check
 ## GitHub Release
 
 - Repository name: `token-studio-roi`.
-- Current public tag: `v4.4.0`.
-- Current local next version: `v4.5.0`.
+- Current public tag: `v4.5.0`.
+- Current local next version: `v4.6.0`.
 - Historical standalone baseline: `v4.0.0`.
 - Suggested topics: `ai-coding`, `token-usage`, `cost-tracking`, `local-first`, `privacy-first`, `roi`, `codex-cli`, `claude-code`.
 - Release notes should say cost is official public token-price conversion, not a provider invoice.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.6.0
+
+- Added `token-studio import-usage --format=ccusage-cli` to explicitly run `ccusage <report> --json --no-cost` and reuse the existing privacy-safe ccusage import planner.
+- Added non-interactive `--yes` gating for the ccusage CLI bridge; dry-run remains default, apply creates a SQLite backup, and unsafe conversation-like fields are rejected.
+- Added `token-studio statusline --format=text|json` for terminal/Claude Code/tmux status bars with recent-window tokens, burn rate, cache hit, budget usage, reset countdown, unpriced-model warnings, and open Advisor Actions.
+- Added weekly ccusage JSON shape support and kept imported third-party cost fields ignored in favor of Token Studio official-price conversion.
+- Updated documentation to position v4.6 as a bridge/statusline catch-up release, not a desktop widget, leaderboard, or full TUI rewrite.
+
 ## 4.5.0
 
 - Added first-run onboarding on the Dashboard, derived from existing usage, budget, advisor action, and token event data without adding schema.

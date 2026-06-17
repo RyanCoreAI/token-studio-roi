@@ -25,6 +25,14 @@ CLI equivalent:
 node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
 ```
 
+If you already use ccusage and want Token Studio to invoke it for you, use the explicit bridge:
+
+```bash
+node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --yes
+```
+
+This runs `ccusage session --json --no-cost` through the configured bridge. Token Studio rejects conversation-like fields, ignores ccusage cost fields, and only writes SQLite when you switch from `--dry-run` to `--apply`.
+
 ## 3. Create A Custom Budget Window
 
 In **导入/预算**, create a source-level budget such as:
@@ -47,6 +55,17 @@ Open `/review` and check:
 - Markdown report export
 
 The first useful action is usually to add one or two recommendations to the action list, then review whether similar work uses fewer tokens next week.
+
+## 5. Optional Terminal Statusline
+
+For a compact live guardrail in a terminal prompt, tmux bar, or Claude Code statusline:
+
+```bash
+node src/cli.mjs statusline --format=text --window-minutes=15
+node src/cli.mjs statusline --format=json --window-minutes=15
+```
+
+The statusline command only reads SQLite. It does not scan logs or start a background process.
 
 ## Privacy Boundary
 

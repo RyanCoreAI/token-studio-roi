@@ -25,12 +25,14 @@ See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller compet
 
 ## What Makes ROI Different?
 
-v4.4 focuses on decisions, not only metering, and makes it easier to bring external structured usage into the ROI workflow:
+v4.6 focuses on decisions, not only metering, and uses a small CLI bridge to close coverage and live-entry gaps without turning Token Studio into a desktop widget or TUI clone:
 
 - **ROI Savings Simulator**: compares official-price model switching scenarios for exploration, testing, context prep, low-value, and abandoned work.
 - **ccusage JSON Import**: imports documented ccusage JSON output for broader structured usage coverage while recomputing costs with Token Studio official pricing.
+- **ccusage CLI Bridge**: explicitly runs `ccusage <report> --json --no-cost` and imports the structured result into Token Studio; non-interactive shells require `--yes`.
 - **Import / Budget Wizard**: paste or upload ccusage JSON in the Dashboard, dry-run first, inspect shape/session/event counts, unsafe fields, and unpriced models, then explicitly apply to SQLite.
 - **Budget Guardrails**: shows custom budget windows, burn projection, and near/over/exceeded warnings on `/live`.
+- **Statusline Guardrails**: `token-studio statusline` prints recent-window tokens, burn rate, cache, budget usage, unpriced-model warnings, and open actions for terminal prompts, tmux, or Claude Code statusline.
 - **Advisor Action Loop**: turns Savings Simulator and ROI Advisor recommendations into open/done/dismissed actions and includes them in weekly Markdown reports.
 - **Collector Audit**: audits experimental collectors before upgrading support, without SQLite writes or full-path output.
 - **Work Evidence**: connects usage to projects, tasks, stages, value, output links, and work items.
@@ -58,7 +60,10 @@ node src/cli.mjs live
 node src/cli.mjs collectors
 node src/cli.mjs collectors --audit --json
 node src/cli.mjs import-usage --format=ccusage-json --file ccusage.json --dry-run
+node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --yes
 node src/cli.mjs import-usage --help
+node src/cli.mjs statusline --format=text
+node src/cli.mjs statusline --format=json --window-minutes=15
 node src/cli.mjs budget list
 node src/cli.mjs report --period=week --format=markdown
 node src/cli.mjs doctor
@@ -75,7 +80,9 @@ npx @ryan/token-studio-roi live
 npx @ryan/token-studio-roi collectors
 npx @ryan/token-studio-roi collectors --audit --json
 npx @ryan/token-studio-roi import-usage --format=ccusage-json --file ccusage.json --dry-run
+npx @ryan/token-studio-roi import-usage --format=ccusage-cli --report=session --dry-run --yes
 npx @ryan/token-studio-roi import-usage --help
+npx @ryan/token-studio-roi statusline --format=text
 npx @ryan/token-studio-roi budget list
 npx @ryan/token-studio-roi report --period=week --format=markdown
 npx @ryan/token-studio-roi collect --sources=claude,codex
@@ -83,7 +90,7 @@ npx @ryan/token-studio-roi doctor
 npx @ryan/token-studio-roi privacy-check
 ```
 
-`demo` uses synthetic data and does not scan real `.claude`, `.codex`, Cursor, or Copilot logs. `start` reads an existing SQLite database and does not collect automatically.
+`demo` uses synthetic data and does not scan real `.claude`, `.codex`, Cursor, or Copilot logs. `start` reads an existing SQLite database and does not collect automatically. The `ccusage-cli` bridge explicitly runs the external ccusage local scanner; Token Studio only accepts structured JSON, rejects conversation-like fields, and ignores third-party cost fields.
 
 See [docs/first-run.md](docs/first-run.md) for the first-run flow. The Dashboard also derives first-run guidance from the current database: no data points to demo/import, data without actions points to `/review`, and budgets without event-level live data explain the `/live` window behavior.
 
@@ -117,10 +124,11 @@ Non-interactive shells refuse collection unless `--yes` is passed.
 - ROI Advisor: local rules only, no LLM calls and no extra token usage.
 - Advisor Action Loop: add recommendations to an action list, mark them done or dismissed, and review trends without claiming causal savings.
 - Model Policy export: generates `MODEL_POLICY.md` from local structured history.
-- ccusage Import: `token-studio import-usage --format=ccusage-json` imports structured JSON without storing conversation content or adopting third-party cost estimates.
+- ccusage Import Bridge: `token-studio import-usage --format=ccusage-json` imports saved structured JSON, and `--format=ccusage-cli` explicitly invokes ccusage CLI; both avoid conversation content and third-party cost estimates.
 - Import / Budget Wizard: dashboard entry for ccusage JSON dry-run/apply and budget-window creation.
 - Budget Guardrails: source-level custom token/cost budgets with near/over/exceeded warnings.
 - Live Monitor: `/live` shows recent 15-minute token, model, cache, burn-rate metadata, budget windows, and guardrail warnings.
+- Statusline Guardrails: `token-studio statusline --format=text|json` reads SQLite only and prints recent-window tokens, burn rate, cache, budget usage, reset countdown, unpriced-model warnings, and open Advisor Actions.
 - Collector Audit: `token-studio collectors --audit` returns a safe experimental-source summary without writing SQLite.
 - Terminal Report: `token-studio report --period=week --format=table|markdown|json` prints a quick ROI review summary.
 - Privacy check: scans for real DBs, AI log directories, `.env`, generated exports, personal paths, and likely secrets.
