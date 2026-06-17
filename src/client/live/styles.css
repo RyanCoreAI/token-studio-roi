@@ -18,6 +18,7 @@ body {
 .live-shell {
   min-height: 100vh;
   padding: 22px;
+  overflow-x: hidden;
 }
 
 .live-nav {
@@ -46,7 +47,8 @@ body {
 }
 
 .live-links a,
-.live-links span {
+.live-links span,
+.live-links button {
   color: var(--live-muted);
   font-size: 13px;
   text-decoration: none;
@@ -54,6 +56,19 @@ body {
 }
 
 .live-links a:hover { color: var(--live-ink); }
+
+.live-links button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--live-rule);
+  border-radius: 8px;
+  background: var(--live-paper);
+  cursor: pointer;
+}
+
+.live-links button:hover {
+  color: var(--live-ink);
+}
 
 .live-hero {
   display: grid;
@@ -78,6 +93,7 @@ body {
   font-size: 38px;
   line-height: 1.06;
   letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 .live-hero p {
@@ -252,7 +268,7 @@ body {
 
 .budget-window-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -414,7 +430,9 @@ body {
     align-items: start;
   }
   .live-hero h1 {
-    font-size: 30px;
+    max-width: 100%;
+    font-size: 27px;
+    line-height: 1.14;
   }
   .live-grid,
   .live-panels,

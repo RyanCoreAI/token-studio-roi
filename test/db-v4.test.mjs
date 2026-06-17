@@ -108,6 +108,45 @@ test('budget profiles validate custom local budgets', () => {
   db.close();
 });
 
+test('budget profiles support fixed reset windows and warning thresholds', () => {
+  const db = tempDb();
+  const profile = upsertBudgetProfile(db, {
+    source: 'Codex CLI',
+    label: 'Codex fixed 5h',
+    windowType: 'fixed',
+    windowMinutes: 300,
+    resetAnchor: '2026-06-17T00:00:00Z',
+    warningThreshold: 0.6,
+    tokenBudget: 100000
+  });
+  assert.equal(profile.windowType, 'fixed');
+  assert.equal(profile.resetAnchor, '2026-06-17T00:00:00.000Z');
+  assert.equal(profile.warningThreshold, 0.6);
+
+  const rolling = upsertBudgetProfile(db, {
+    id: profile.id,
+    source: 'Codex CLI',
+    label: 'Codex rolling',
+    windowType: 'rolling',
+    windowMinutes: 60,
+    resetAnchor: '2026-06-17T00:00:00Z',
+    warningThreshold: 0.75,
+    tokenBudget: 100000
+  });
+  assert.equal(rolling.windowType, 'rolling');
+  assert.equal(rolling.resetAnchor, null);
+  assert.throws(() => upsertBudgetProfile(db, {
+    source: 'Codex CLI',
+    label: 'bad threshold',
+    windowType: 'fixed',
+    windowMinutes: 300,
+    resetAnchor: '2026-06-17T00:00:00Z',
+    warningThreshold: 1.5,
+    tokenBudget: 1000
+  }), /warningThreshold/);
+  db.close();
+});
+
 test('advisor actions upsert by period and source rule', () => {
   const db = tempDb();
   const first = upsertAdvisorAction(db, {

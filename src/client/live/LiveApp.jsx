@@ -6,6 +6,7 @@ const REFRESH_MS = 7000;
 export function LiveApp() {
   const [snapshot, setSnapshot] = useState(null);
   const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -35,6 +36,17 @@ export function LiveApp() {
     ? new Date(snapshot.generatedAt).toLocaleTimeString()
     : 'waiting'
   , [snapshot]);
+  const statuslineCommand = `node src/cli.mjs statusline --format=text --window-minutes=${snapshot?.windowMinutes || 15}`;
+
+  async function copyStatuslineCommand() {
+    try {
+      await navigator.clipboard?.writeText(statuslineCommand);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  }
 
   return (
     <main className="live-shell">
@@ -44,6 +56,7 @@ export function LiveApp() {
           <strong>Token Studio Live</strong>
         </div>
         <div className="live-links">
+          <button type="button" onClick={copyStatuslineCommand}>{copied ? '已复制' : '复制 statusline'}</button>
           <a href="/">看板</a>
           <a href="/review">复盘</a>
           <span>{generated}</span>
@@ -84,7 +97,7 @@ export function LiveApp() {
             <article key={window.id || window.label} className={`budget-window status-${window.status}`}>
               <div className="budget-window-head">
                 <div>
-                  <span>{window.source || 'all sources'} · {window.windowMinutes}m rolling</span>
+                  <span>{window.source || 'all sources'} · {window.windowMinutes}m {window.windowType || 'rolling'} · warn {Math.round(Number(window.warningThreshold || 0.75) * 100)}%</span>
                   <strong>{window.label}</strong>
                 </div>
                 <b>{budgetStatusLabel(window.status)}</b>
@@ -97,6 +110,7 @@ export function LiveApp() {
                 <BudgetMetric label="官方价" value={`$${formatMoney(window.costUSD)} / ${window.costBudgetUSD ? `$${formatMoney(window.costBudgetUSD)}` : '—'}`} />
                 <BudgetMetric label="预计 Tokens" value={formatNumber(window.projectedTokens)} />
                 <BudgetMetric label="Burn Rate" value={`${formatNumber(window.burnRateTokensPerHour)}/h`} />
+                <BudgetMetric label="Reset" value={window.resetInMinutes == null ? '—' : `${Math.round(window.resetInMinutes)}m`} />
               </div>
             </article>
           ))}

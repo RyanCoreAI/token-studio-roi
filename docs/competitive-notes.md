@@ -56,9 +56,20 @@ v4.6 therefore adds:
 
 This narrows the most visible competitive gap while keeping Token Studio ROI focused on work evidence, model strategy, and Advisor Actions.
 
+## v4.7 Usability Catch-Up
+
+v4.7 keeps the same product wedge but makes the catch-up features easier to use:
+
+- ccusage Bridge UX: the Dashboard generates copyable commands for saved JSON or CLI bridge workflows, but the browser never runs external scanners.
+- Quota Profiles v2: custom guardrails now support rolling and fixed reset windows, reset countdowns, and editable warning thresholds.
+- Statusline Integration Pack: documented snippets for Claude Code statusline, tmux, PowerShell prompts, and JSON scripts.
+- ROI Playbook Export: `token-studio policy --format=markdown|claude-md|agents-md` turns Model Policy into copyable operating rules without editing user files.
+
+This closes practical gaps with terminal-first competitors while preserving the main differentiation: ROI evidence, work outputs, and explicit action loops.
+
 ## Remaining Gaps
 
-- Collector depth is still behind the broadest multi-tool products. v4.6 improves breadth through ccusage JSON/CLI bridge and detected-only coverage, but Token Studio's own stable collectors remain narrower than ccusage or TokenTracker.
+- Collector depth is still behind the broadest multi-tool products. v4.7 improves breadth through ccusage JSON/CLI bridge and detected-only coverage, but Token Studio's own stable collectors remain narrower than ccusage or TokenTracker.
 - Live monitoring is intentionally lightweight; it is a guardrail for current burn rate, not an exact subscription predictor.
 - Desktop packaging is not included. Keep the public story focused on local browser + CLI first.
 - Automatic attribution is rule-based and should always display provenance and confidence.

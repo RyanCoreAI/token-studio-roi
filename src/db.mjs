@@ -13,7 +13,7 @@ export const PROJECT_ALIAS_MATCH_TYPES = ['prefix', 'contains', 'regex'];
 export const ANNOTATION_SOURCES = ['manual', 'auto', 'imported'];
 export const PRIVACY_LEVELS = ['safe', 'hashed', 'redacted', 'unavailable'];
 export const WORK_ITEM_TYPES = ['未分类', '功能开发', '问题修复', '代码审查', '技术调研', '内容创作', '运维配置', '其他'];
-export const BUDGET_WINDOW_TYPES = ['rolling'];
+export const BUDGET_WINDOW_TYPES = ['rolling', 'fixed'];
 export const ADVISOR_ACTION_STATUSES = ['open', 'done', 'dismissed'];
 export const DEFAULT_SESSION_ANNOTATION = {
   projectAlias: null,
@@ -226,6 +226,8 @@ function initSchema(db) {
       window_minutes INTEGER NOT NULL DEFAULT 300,
       token_budget INTEGER NOT NULL DEFAULT 0,
       cost_budget_usd REAL NOT NULL DEFAULT 0,
+      reset_anchor TEXT,
+      warning_threshold REAL NOT NULL DEFAULT 0.75,
       enabled INTEGER NOT NULL DEFAULT 1,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -268,6 +270,8 @@ function initSchema(db) {
   ensureColumn(db, 'session_annotations', 'auto_version', 'TEXT');
   ensureColumn(db, 'session_annotations', 'auto_run_id', 'TEXT');
   ensureColumn(db, 'session_annotations', 'auto_updated_at', 'TEXT');
+  ensureColumn(db, 'budget_profiles', 'reset_anchor', 'TEXT');
+  ensureColumn(db, 'budget_profiles', 'warning_threshold', 'REAL NOT NULL DEFAULT 0.75');
   ensureColumn(db, 'session_outputs', 'output_type', "TEXT NOT NULL DEFAULT '未分类'");
   db.exec('CREATE INDEX IF NOT EXISTS idx_session_annotations_work ON session_annotations(work_purpose, work_stage, value_level)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_session_annotations_provenance ON session_annotations(annotation_source, annotation_confidence, auto_run_id)');
@@ -1050,11 +1054,13 @@ export function normalizeBudgetProfile(row = {}) {
   const windowMinutes = normalizePositiveInteger(row.windowMinutes ?? row.window_minutes, 'windowMinutes', 10_080);
   const tokenBudget = normalizeTokenCount(row.tokenBudget ?? row.token_budget, 'tokenBudget');
   const costBudgetUSD = normalizeNonNegativeNumber(row.costBudgetUSD ?? row.cost_budget_usd, 'costBudgetUSD');
+  const resetAnchor = normalizeResetAnchor(row.resetAnchor ?? row.reset_anchor, windowType);
+  const warningThreshold = normalizeWarningThreshold(row.warningThreshold ?? row.warning_threshold);
   const enabled = normalizeBoolean(row.enabled, true);
   if (tokenBudget === 0 && costBudgetUSD === 0) {
     throw new Error('tokenBudget or costBudgetUSD must be greater than 0');
   }
-  return { id, source, label, windowType, windowMinutes, tokenBudget, costBudgetUSD, enabled };
+  return { id, source, label, windowType, windowMinutes, tokenBudget, costBudgetUSD, resetAnchor, warningThreshold, enabled };
 }
 
 export function upsertBudgetProfile(db, row = {}) {
@@ -1062,8 +1068,9 @@ export function upsertBudgetProfile(db, row = {}) {
   db.prepare(`
     INSERT INTO budget_profiles (
       id, source, label, window_type, window_minutes,
-      token_budget, cost_budget_usd, enabled, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      token_budget, cost_budget_usd, reset_anchor, warning_threshold,
+      enabled, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
       source = excluded.source,
       label = excluded.label,
@@ -1071,6 +1078,8 @@ export function upsertBudgetProfile(db, row = {}) {
       window_minutes = excluded.window_minutes,
       token_budget = excluded.token_budget,
       cost_budget_usd = excluded.cost_budget_usd,
+      reset_anchor = excluded.reset_anchor,
+      warning_threshold = excluded.warning_threshold,
       enabled = excluded.enabled,
       updated_at = datetime('now')
   `).run(
@@ -1081,6 +1090,8 @@ export function upsertBudgetProfile(db, row = {}) {
     profile.windowMinutes,
     profile.tokenBudget,
     profile.costBudgetUSD,
+    profile.resetAnchor,
+    profile.warningThreshold,
     profile.enabled ? 1 : 0
   );
   const id = profile.id ?? db.prepare('SELECT last_insert_rowid() AS id').get().id;
@@ -1095,6 +1106,8 @@ export function getBudgetProfile(db, id) {
       window_minutes AS windowMinutes,
       token_budget AS tokenBudget,
       cost_budget_usd AS costBudgetUSD,
+      reset_anchor AS resetAnchor,
+      warning_threshold AS warningThreshold,
       enabled,
       updated_at AS updatedAt
     FROM budget_profiles
@@ -1110,6 +1123,8 @@ export function listBudgetProfiles(db) {
       window_minutes AS windowMinutes,
       token_budget AS tokenBudget,
       cost_budget_usd AS costBudgetUSD,
+      reset_anchor AS resetAnchor,
+      warning_threshold AS warningThreshold,
       enabled,
       updated_at AS updatedAt
     FROM budget_profiles
@@ -1313,6 +1328,26 @@ function normalizeNonNegativeNumber(value, field) {
     throw new Error(`${field} must be a non-negative number`);
   }
   return number;
+}
+
+function normalizeWarningThreshold(value) {
+  if (value == null || value === '') return 0.75;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0 || number > 1) {
+    throw new Error('warningThreshold must be greater than 0 and no greater than 1');
+  }
+  return number;
+}
+
+function normalizeResetAnchor(value, windowType) {
+  const text = normalizeOptionalText(value, 'resetAnchor', 80);
+  if (!text) return null;
+  if (windowType !== 'fixed') return null;
+  const ms = new Date(text).getTime();
+  if (!Number.isFinite(ms)) {
+    throw new Error('resetAnchor must be a valid date/time for fixed budget windows');
+  }
+  return new Date(ms).toISOString();
 }
 
 function autoRunId() {

@@ -39,6 +39,8 @@ node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --
 node src/cli.mjs import-usage --format=ccusage-cli --report=blocks --apply --yes
 ```
 
+The Dashboard ccusage CLI Bridge panel only builds these copyable commands. It does not run ccusage from the browser or through a new server-side scanner API.
+
 Detected-only sources only report whether likely local paths exist. They do not write `daily_usage`, `session_usage`, or `token_events` until a later audit proves reliable token/model/time/session metadata.
 
 ## Collector Audit

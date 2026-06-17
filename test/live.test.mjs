@@ -151,6 +151,42 @@ test('live snapshot warns when current pace will exceed custom budget', () => {
   assert.ok(snapshot.warnings.some(item => item.type === 'over-budget-pace'));
 });
 
+test('live snapshot supports fixed budget reset windows and custom near threshold', () => {
+  const snapshot = buildLiveSnapshot({
+    now: new Date('2026-06-17T02:15:00Z'),
+    windowMinutes: 15,
+    budgetProfiles: [{
+      id: 1,
+      source: 'Codex CLI',
+      label: 'Codex fixed hour',
+      windowType: 'fixed',
+      windowMinutes: 60,
+      resetAnchor: '2026-06-17T00:00:00Z',
+      warningThreshold: 0.2,
+      tokenBudget: 10_000,
+      enabled: true
+    }],
+    tokenEvents: [{
+      eventId: 'e1',
+      device: 'demo',
+      source: 'Codex CLI',
+      sessionId: 's1',
+      timestamp: '2026-06-17T02:10:00Z',
+      model: 'gpt-5.3-codex',
+      inputTokens: 1_800,
+      outputTokens: 400
+    }]
+  });
+  const window = snapshot.budgetWindows[0];
+  assert.equal(window.windowType, 'fixed');
+  assert.equal(window.windowStart, '2026-06-17T02:00:00.000Z');
+  assert.equal(window.windowEnd, '2026-06-17T03:00:00.000Z');
+  assert.equal(window.resetInMinutes, 45);
+  assert.equal(window.warningThreshold, 0.2);
+  assert.equal(window.status, 'near-limit');
+  assert.ok(snapshot.warnings.some(item => item.type === 'near-budget-limit'));
+});
+
 
 test('live API returns guardrails and warnings from temporary SQLite', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'token-studio-live-api-'));

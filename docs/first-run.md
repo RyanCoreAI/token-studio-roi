@@ -33,12 +33,17 @@ node src/cli.mjs import-usage --format=ccusage-cli --report=session --dry-run --
 
 This runs `ccusage session --json --no-cost` through the configured bridge. Token Studio rejects conversation-like fields, ignores ccusage cost fields, and only writes SQLite when you switch from `--dry-run` to `--apply`.
 
+The Dashboard also has a **ccusage CLI Bridge** command builder. It only generates a copyable terminal command; the browser does not run ccusage or any external scanner.
+
 ## 3. Create A Custom Budget Window
 
 In **导入/预算**, create a source-level budget such as:
 
 - source: `Codex CLI`
-- window: `60` minutes
+- window type: `rolling` or `fixed`
+- window: `60` minutes, `300` minutes, or your own target
+- reset anchor: fixed windows only
+- warning threshold: for example `0.75`
 - token budget: your own target
 - USD budget: optional official-price conversion target
 
@@ -65,7 +70,19 @@ node src/cli.mjs statusline --format=text --window-minutes=15
 node src/cli.mjs statusline --format=json --window-minutes=15
 ```
 
-The statusline command only reads SQLite. It does not scan logs or start a background process.
+The statusline command only reads SQLite. It does not scan logs or start a background process. Copyable Claude Code, tmux, and PowerShell snippets are in [statusline.md](statusline.md).
+
+## 6. Optional ROI Playbook Export
+
+Export a model-use playbook without editing `CLAUDE.md`, `AGENTS.md`, or project files:
+
+```bash
+node src/cli.mjs policy --format=markdown
+node src/cli.mjs policy --format=claude-md
+node src/cli.mjs policy --format=agents-md
+```
+
+Use the output as a review artifact or copy the relevant section manually into your local project rules.
 
 ## Privacy Boundary
 

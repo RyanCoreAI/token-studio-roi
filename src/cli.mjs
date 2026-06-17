@@ -15,6 +15,7 @@ import { createSqliteBackup, defaultDbPath, deleteBudgetProfile, listBudgetProfi
 import { formatPrivacyCheckReport, runPrivacyCheck } from './privacy-check.mjs';
 import { buildTerminalReport, formatTerminalReport } from './terminal-report.mjs';
 import { buildEmptyStatuslineSnapshot, buildStatuslineSnapshot, formatStatuslineText } from './statusline.mjs';
+import { buildModelPolicy, formatModelPolicy } from './model-policy.mjs';
 
 const command = process.argv[2] || 'help';
 const args = parseArgs(process.argv.slice(3));
@@ -40,6 +41,8 @@ try {
     await budgetCommand();
   } else if (command === 'report') {
     await reportCommand();
+  } else if (command === 'policy') {
+    await policyCommand();
   } else if (command === 'doctor') {
     await doctorCommand();
   } else if (command === 'privacy-check') {
@@ -258,6 +261,10 @@ async function ensureCcusageBridgeConfirmed({ report, commandLabel }) {
 }
 
 async function budgetCommand() {
+  if (args.help) {
+    printBudgetHelp();
+    return;
+  }
   const action = args._[0] || 'list';
   const db = openCliDb();
   try {
@@ -273,7 +280,7 @@ async function budgetCommand() {
         return;
       }
       for (const profile of profiles) {
-        console.log(`- #${profile.id} ${profile.label}: source=${profile.source || '*'}, window=${profile.windowMinutes}m, tokenBudget=${profile.tokenBudget || '-'}, costBudgetUSD=${profile.costBudgetUSD || '-'}, enabled=${profile.enabled ? 'yes' : 'no'}`);
+        console.log(`- #${profile.id} ${profile.label}: source=${profile.source || '*'}, window=${profile.windowType || 'rolling'}:${profile.windowMinutes}m, reset=${profile.resetAnchor || '-'}, warn=${Math.round(Number(profile.warningThreshold || 0.75) * 100)}%, tokenBudget=${profile.tokenBudget || '-'}, costBudgetUSD=${profile.costBudgetUSD || '-'}, enabled=${profile.enabled ? 'yes' : 'no'}`);
       }
       return;
     }
@@ -284,6 +291,8 @@ async function budgetCommand() {
         label: args.label,
         windowType: args.windowType || 'rolling',
         windowMinutes: args.windowMinutes,
+        resetAnchor: args.resetAnchor || null,
+        warningThreshold: args.warningThreshold ?? 0.75,
         tokenBudget: args.tokenBudget || 0,
         costBudgetUSD: args.costBudgetUsd ?? args.costBudgetUSD ?? 0,
         enabled: args.enabled ?? true
@@ -317,6 +326,10 @@ async function reportCommand() {
 }
 
 async function statuslineCommand() {
+  if (args.help) {
+    printStatuslineHelp();
+    return;
+  }
   const format = args.format || 'text';
   if (!['text', 'json'].includes(format)) {
     throw new Error('statusline --format must be text or json.');
@@ -356,6 +369,25 @@ async function privacyCheckCommand() {
   const result = runPrivacyCheck({ includeUntracked: Boolean(args.includeUntracked) });
   console.log(formatPrivacyCheckReport(result));
   if (!result.ok) process.exitCode = 2;
+}
+
+async function policyCommand() {
+  const format = args.format || 'markdown';
+  if (!['markdown', 'claude-md', 'agents-md'].includes(format)) {
+    throw new Error('policy --format must be markdown, claude-md, or agents-md.');
+  }
+  let db;
+  let sessions = [];
+  try {
+    db = openCliReadOnlyDb();
+    sessions = loadPolicySessions(db);
+  } catch (error) {
+    if (!/SQLite database not found/i.test(error.message)) throw error;
+  } finally {
+    db?.close();
+  }
+  const policy = buildModelPolicy({ sessions });
+  console.log(formatModelPolicy(policy, format));
 }
 
 async function confirmCollect(sources) {
@@ -508,9 +540,53 @@ function printHelp() {
     '  token-studio import-usage --format=ccusage-cli --report=<daily|weekly|monthly|session|blocks> [--dry-run|--apply] [--yes]',
     '  token-studio budget list|set|delete',
     '  token-studio report --period=week --format=table|markdown|json',
+    '  token-studio policy --format=markdown|claude-md|agents-md',
     '  token-studio collect --sources claude,codex [--yes]',
     '  token-studio doctor',
     '  token-studio privacy-check [--include-untracked]'
+  ].join('\n'));
+}
+
+function printBudgetHelp() {
+  console.log([
+    'Token Studio Budget Profiles',
+    '',
+    'Budgets are local custom guardrails. They are not provider subscription quotas.',
+    '',
+    'Examples:',
+    '  token-studio budget list',
+    '  token-studio budget set --source "Codex CLI" --label "Codex 15m" --window-minutes 15 --token-budget 50000',
+    '  token-studio budget set --source "Claude Code" --label "Claude 5h" --window-type fixed --window-minutes 300 --reset-anchor 2026-06-17T09:00:00Z --warning-threshold 0.75 --token-budget 500000',
+    '  token-studio budget delete --id 1',
+    '',
+    'Options:',
+    '  --window-type rolling|fixed',
+    '  --reset-anchor <ISO datetime>    fixed windows only',
+    '  --warning-threshold <0-1>        default 0.75'
+  ].join('\n'));
+}
+
+function printStatuslineHelp() {
+  console.log([
+    'Token Studio Statusline Guardrails',
+    '',
+    'Read-only SQLite statusline for terminal prompts, tmux, scripts, or Claude Code statusline.',
+    '',
+    'Examples:',
+    '  token-studio statusline --format=text --window-minutes=15 --max-width=100',
+    '  token-studio statusline --format=json --window-minutes=15',
+    '',
+    'Claude Code statusline command:',
+    '  node src/cli.mjs statusline --format=text --window-minutes=15 --max-width=100',
+    '',
+    'tmux:',
+    '  set -g status-right "#(node /path/to/token-studio-roi/src/cli.mjs statusline --format=text --max-width=80)"',
+    '',
+    'PowerShell prompt:',
+    '  function prompt { "$(node D:\\\\path\\\\token-studio-roi\\\\src\\\\cli.mjs statusline --format=text --max-width=80) PS $($PWD)> " }',
+    '',
+    'Privacy:',
+    '  statusline only reads local SQLite. It does not scan logs, run ccusage, or start a background process.'
   ].join('\n'));
 }
 
@@ -539,4 +615,22 @@ function printImportUsageHelp() {
     '  ccusage-cli runs an external local scanner only after interactive confirmation or --yes.',
     '  Imported cost fields are ignored; Token Studio recomputes official-price conversion.'
   ].join('\n'));
+}
+
+function loadPolicySessions(db) {
+  return db.prepare(`
+    SELECT
+      COALESCE(a.work_purpose, '未说明') AS workPurpose,
+      COALESCE(a.work_stage, '未说明') AS workStage,
+      COALESCE(a.value_level, '未评估') AS valueLevel,
+      COALESCE(a.output_status, '未标注') AS outputStatus,
+      s.total_tokens AS totalTokens,
+      s.cost_usd AS costUSD
+    FROM session_usage s
+    LEFT JOIN session_annotations a
+      ON a.device = s.device
+      AND a.source = s.source
+      AND a.session_id = s.session_id
+    ORDER BY s.total_tokens DESC
+  `).all();
 }

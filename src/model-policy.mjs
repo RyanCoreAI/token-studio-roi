@@ -57,6 +57,59 @@ export function formatModelPolicyMarkdown(policy) {
   ].join('\n');
 }
 
+export function formatModelPolicy(policy, format = 'markdown') {
+  if (format === 'markdown') return formatModelPolicyMarkdown(policy);
+  if (format === 'claude-md') return formatClaudePolicySnippet(policy);
+  if (format === 'agents-md') return formatAgentsPolicySnippet(policy);
+  throw new Error('Unsupported model policy format');
+}
+
+function formatClaudePolicySnippet(policy) {
+  return [
+    '# Token Studio ROI Model Policy',
+    '',
+    'Use this as a local operating guide for Claude Code work. It is generated from Token Studio structured metadata and does not include prompts, responses, transcripts, diffs, or full file paths.',
+    '',
+    '## Model Use',
+    '',
+    ...policy.rules.flatMap(rule => [
+      `- ${rule.name}: ${rule.policy}`,
+      `  Evidence: ${rule.evidence}`
+    ]),
+    '',
+    '## Guardrails',
+    '',
+    '- Start testing, exploration, context cleanup, and low-risk validation with lightweight models.',
+    '- Use mid-tier models for normal implementation and debugging after the task is scoped.',
+    '- Reserve heavy models for high-value output, release review, and critical decisions.',
+    '- When input is high and output is low, reduce context before upgrading the model.',
+    '- Treat official-price conversion as a review signal, not a provider invoice.'
+  ].join('\n');
+}
+
+function formatAgentsPolicySnippet(policy) {
+  return [
+    '# Token Studio ROI Agent Policy',
+    '',
+    'This project uses local ROI guardrails from Token Studio. Follow these rules before spending heavy-model tokens.',
+    '',
+    '## Operating Rules',
+    '',
+    ...policy.rules.flatMap(rule => [
+      `- Rule: ${rule.name}`,
+      `  - When: ${rule.when}`,
+      `  - Do: ${rule.policy}`,
+      `  - Evidence: ${rule.evidence}`
+    ]),
+    '',
+    '## Non-Goals',
+    '',
+    '- Do not paste or export conversation content into reports.',
+    '- Do not claim official-price conversion is an exact vendor bill.',
+    '- Do not automatically edit CLAUDE.md, AGENTS.md, or project files from this export.'
+  ].join('\n');
+}
+
 function aggregateByPurposeStage(sessions) {
   const rows = new Map();
   for (const session of sessions) {

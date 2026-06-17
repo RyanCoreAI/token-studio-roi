@@ -163,25 +163,27 @@ export function buildBudgetWindows({ rows = [], budgetProfiles = [], nowMs = Dat
     .filter(profile => profile && profile.enabled !== false)
     .map(profile => {
       const windowMinutes = positiveNumber(profile.windowMinutes, 300);
-      const windowMs = windowMinutes * 60 * 1000;
-      const sinceMs = nowMs - windowMs;
+      const frame = budgetWindowFrame(profile, nowMs, windowMinutes);
       const source = String(profile.source || '').trim();
       const matching = rows.filter(row => {
         const timestampMs = row.timestampMs ?? row.lastActivityMs ?? 0;
-        return timestampMs >= sinceMs
+        return timestampMs >= frame.startMs
           && timestampMs <= nowMs
           && (!source || row.source === source);
       });
       const totals = sumRows(matching);
-      const firstMs = matching.length
+      const firstMs = frame.windowType === 'fixed'
+        ? frame.startMs
+        : matching.length
         ? Math.min(...matching.map(row => row.timestampMs ?? row.lastActivityMs ?? nowMs).filter(Number.isFinite))
-        : sinceMs;
+        : frame.startMs;
       const elapsedMinutes = Math.max(1, Math.min(windowMinutes, (nowMs - firstMs) / 60000 || windowMinutes));
       const burnRateTokensPerHour = Math.round((totals.totalTokens / elapsedMinutes) * 60);
       const projectedTokens = Math.round((totals.totalTokens / elapsedMinutes) * windowMinutes);
       const projectedCostUSD = (totals.costUSD / elapsedMinutes) * windowMinutes;
       const tokenBudget = number(profile.tokenBudget);
       const costBudgetUSD = number(profile.costBudgetUSD);
+      const warningThreshold = threshold(profile.warningThreshold, 0.75);
       const tokenShare = tokenBudget ? totals.totalTokens / tokenBudget : 0;
       const costShare = costBudgetUSD ? totals.costUSD / costBudgetUSD : 0;
       const projectedTokenShare = tokenBudget ? projectedTokens / tokenBudget : 0;
@@ -190,17 +192,19 @@ export function buildBudgetWindows({ rows = [], budgetProfiles = [], nowMs = Dat
       const projectedShare = Math.max(projectedTokenShare, projectedCostShare);
       const status = currentShare >= 1 ? 'exceeded'
         : projectedShare >= 1 ? 'over-pace'
-          : currentShare >= 0.8 ? 'near-limit'
+          : currentShare >= warningThreshold ? 'near-limit'
             : 'ok';
       return {
         id: profile.id ?? null,
         source,
         label: profile.label || (source ? `${source} budget` : 'Token budget'),
-        windowType: profile.windowType || 'rolling',
+        windowType: frame.windowType,
         windowMinutes,
-        windowStart: new Date(sinceMs).toISOString(),
-        windowEnd: new Date(nowMs).toISOString(),
-        resetInMinutes: Math.max(0, Math.ceil(windowMinutes - elapsedMinutes)),
+        resetAnchor: profile.resetAnchor || null,
+        warningThreshold,
+        windowStart: new Date(frame.startMs).toISOString(),
+        windowEnd: new Date(frame.endMs).toISOString(),
+        resetInMinutes: frame.resetInMinutes,
         totalTokens: totals.totalTokens,
         costUSD: totals.costUSD,
         burnRateTokensPerHour,
@@ -215,6 +219,32 @@ export function buildBudgetWindows({ rows = [], budgetProfiles = [], nowMs = Dat
         status
       };
     });
+}
+
+function budgetWindowFrame(profile, nowMs, windowMinutes) {
+  const windowMs = windowMinutes * 60 * 1000;
+  const windowType = profile.windowType === 'fixed' ? 'fixed' : 'rolling';
+  if (windowType === 'fixed') {
+    const anchorMs = new Date(profile.resetAnchor || 0).getTime();
+    if (Number.isFinite(anchorMs) && anchorMs > 0) {
+      const index = Math.floor((nowMs - anchorMs) / windowMs);
+      const startMs = anchorMs + index * windowMs;
+      const endMs = startMs + windowMs;
+      return {
+        windowType,
+        startMs,
+        endMs,
+        resetInMinutes: Math.max(0, Math.ceil((endMs - nowMs) / 60000))
+      };
+    }
+  }
+  const startMs = nowMs - windowMs;
+  return {
+    windowType: 'rolling',
+    startMs,
+    endMs: nowMs,
+    resetInMinutes: windowMinutes
+  };
 }
 
 export function liveGuardrailConfig(overrides = {}) {
@@ -379,6 +409,11 @@ function envPositive(name, fallback) {
 function positiveNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function threshold(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 && number <= 1 ? number : fallback;
 }
 
 function isUnpricedModel(model) {

@@ -25,6 +25,13 @@ import {
   filterSessionsByDashboardFilters,
   sessionModel
 } from './model-usage.js';
+import {
+  BUDGET_TEMPLATES,
+  CCUSAGE_BRIDGE_REPORTS,
+  applyBudgetTemplate,
+  buildCcusageBridgeCommand,
+  defaultResetAnchor
+} from './import-budget.js';
 import { buildFirstRunState } from './onboarding.js';
 import './styles.css';
 
@@ -1000,16 +1007,26 @@ function ImportBudgetModal({
   const [importResult, setImportResult] = useState(null);
   const [importError, setImportError] = useState(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [bridgeReport, setBridgeReport] = useState('session');
+  const [bridgeMode, setBridgeMode] = useState('dry-run');
+  const [bridgeCopied, setBridgeCopied] = useState(false);
   const [budgetBusy, setBudgetBusy] = useState(false);
   const [budgetError, setBudgetError] = useState(null);
   const [budgetForm, setBudgetForm] = useState(() => ({
     source: sources[0] || 'Codex CLI',
     label: '',
+    windowType: 'rolling',
     windowMinutes: 60,
+    resetAnchor: defaultResetAnchor(),
+    warningThreshold: 0.75,
     tokenBudget: '',
     costBudgetUSD: '',
     enabled: true
   }));
+  const bridgeCommand = buildCcusageBridgeCommand({
+    report: bridgeReport,
+    apply: bridgeMode === 'apply'
+  });
 
   const runImport = async (apply) => {
     setImportBusy(true);
@@ -1039,7 +1056,10 @@ function ImportBudgetModal({
       await onSaveBudgetProfile({
         source: budgetForm.source.trim(),
         label: budgetForm.label.trim() || `${budgetForm.source.trim()} custom budget`,
+        windowType: budgetForm.windowType,
         windowMinutes: Number(budgetForm.windowMinutes) || 60,
+        resetAnchor: budgetForm.windowType === 'fixed' ? budgetForm.resetAnchor : '',
+        warningThreshold: Number(budgetForm.warningThreshold) || 0.75,
         tokenBudget: budgetForm.tokenBudget === '' ? 0 : Number(budgetForm.tokenBudget),
         costBudgetUSD: budgetForm.costBudgetUSD === '' ? 0 : Number(budgetForm.costBudgetUSD),
         enabled: budgetForm.enabled
@@ -1047,6 +1067,7 @@ function ImportBudgetModal({
       setBudgetForm(current => ({
         ...current,
         label: '',
+        resetAnchor: defaultResetAnchor(),
         tokenBudget: '',
         costBudgetUSD: ''
       }));
@@ -1071,6 +1092,15 @@ function ImportBudgetModal({
 
   const canDryRun = importText.trim().length > 0 && !importBusy;
   const canApply = canDryRun && importResult?.mode === 'dry-run' && !importResult.error;
+  const copyBridgeCommand = async () => {
+    try {
+      await navigator.clipboard?.writeText(bridgeCommand);
+      setBridgeCopied(true);
+      window.setTimeout(() => setBridgeCopied(false), 1600);
+    } catch {
+      setBridgeCopied(false);
+    }
+  };
 
   return (
     <>
@@ -1092,7 +1122,7 @@ function ImportBudgetModal({
           <section className="import-budget-section">
             <div className="import-budget-section-head">
               <div>
-                <h4>ccusage Import Wizard</h4>
+                <h4>ccusage Saved JSON Import</h4>
                 <p>只接受结构化 token/model/session/time/cache 字段；发现 prompt、response、transcript、diff、content 等正文风险字段会拒绝。</p>
               </div>
               <span className="tag tag-soft">默认 dry-run</span>
@@ -1133,10 +1163,56 @@ function ImportBudgetModal({
           <section className="import-budget-section">
             <div className="import-budget-section-head">
               <div>
+                <h4>ccusage CLI Bridge</h4>
+                <p>这里不从浏览器运行外部扫描器，只生成可复制命令。命令会显式调用 ccusage 输出 JSON，Token Studio 只接收结构化结果。</p>
+              </div>
+              <span className="tag tag-soft">copy only</span>
+            </div>
+            <div className="form-grid form-grid-3">
+              <label className="form-field">
+                <span>Report</span>
+                <select value={bridgeReport} onChange={(event) => setBridgeReport(event.target.value)}>
+                  {CCUSAGE_BRIDGE_REPORTS.map(report => <option key={report} value={report}>{report}</option>)}
+                </select>
+              </label>
+              <label className="form-field">
+                <span>模式</span>
+                <select value={bridgeMode} onChange={(event) => setBridgeMode(event.target.value)}>
+                  <option value="dry-run">dry-run</option>
+                  <option value="apply">apply</option>
+                </select>
+              </label>
+              <div className="import-budget-actions import-budget-command-actions">
+                <button className="btn" type="button" onClick={copyBridgeCommand}>
+                  {bridgeCopied ? '已复制' : '复制命令'}
+                </button>
+              </div>
+              <label className="form-field form-field-wide">
+                <span>复制到本地终端运行</span>
+                <textarea value={bridgeCommand} readOnly rows={2}/>
+              </label>
+            </div>
+          </section>
+
+          <section className="import-budget-section">
+            <div className="import-budget-section-head">
+              <div>
                 <h4>Budget Wizard</h4>
-                <p>只创建你自己的 source 级预算窗口，不内置或声称知道 Claude/Codex/Cursor 的真实套餐额度。</p>
+                <p>只创建你自己的 source 级限额窗口，不内置或声称知道 Claude/Codex/Cursor 的真实套餐额度。</p>
               </div>
               <a className="btn" href="/live">打开 /live</a>
+            </div>
+            <div className="budget-template-row">
+              {BUDGET_TEMPLATES.map(template => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className="btn btn-mini"
+                  onClick={() => setBudgetForm(current => applyBudgetTemplate(current, template))}
+                >
+                  {template.label}
+                </button>
+              ))}
             </div>
             <div className="form-grid form-grid-3">
               <label className="form-field">
@@ -1159,12 +1235,42 @@ function ImportBudgetModal({
                 />
               </label>
               <label className="form-field">
+                <span>窗口类型</span>
+                <select
+                  value={budgetForm.windowType}
+                  onChange={(event) => setBudgetForm({ ...budgetForm, windowType: event.target.value })}
+                >
+                  <option value="rolling">rolling</option>
+                  <option value="fixed">fixed</option>
+                </select>
+              </label>
+              <label className="form-field">
                 <span>窗口分钟</span>
                 <input
                   type="number"
                   min="1"
                   value={budgetForm.windowMinutes}
                   onChange={(event) => setBudgetForm({ ...budgetForm, windowMinutes: event.target.value })}
+                />
+              </label>
+              <label className="form-field">
+                <span>Reset anchor</span>
+                <input
+                  type="datetime-local"
+                  value={budgetForm.resetAnchor}
+                  disabled={budgetForm.windowType !== 'fixed'}
+                  onChange={(event) => setBudgetForm({ ...budgetForm, resetAnchor: event.target.value })}
+                />
+              </label>
+              <label className="form-field">
+                <span>预警阈值</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  max="1"
+                  step="0.05"
+                  value={budgetForm.warningThreshold}
+                  onChange={(event) => setBudgetForm({ ...budgetForm, warningThreshold: event.target.value })}
                 />
               </label>
               <label className="form-field">
@@ -1254,7 +1360,11 @@ function BudgetProfileList({ profiles, busy, onDelete }) {
         <article key={profile.id} className={`budget-profile-row ${profile.enabled ? 'enabled' : 'disabled'}`}>
           <div>
             <strong>{profile.label}</strong>
-            <span>{profile.source} · {profile.windowMinutes} min · {profile.enabled ? '生效中' : '已停用'}</span>
+            <span>
+              {profile.source || 'all sources'} · {profile.windowType || 'rolling'} · {profile.windowMinutes} min
+              {profile.resetAnchor ? ` · reset ${profile.resetAnchor}` : ''}
+              {' '}· warn {Math.round(Number(profile.warningThreshold || 0.75) * 100)}% · {profile.enabled ? '生效中' : '已停用'}
+            </span>
           </div>
           <div>
             <b>{profile.tokenBudget ? `${U.compactCN(profile.tokenBudget)} tokens` : '— tokens'}</b>

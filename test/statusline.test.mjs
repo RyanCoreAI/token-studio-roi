@@ -78,9 +78,19 @@ test('statusline CLI handles missing SQLite as an empty read-only state', async 
   }
 });
 
+test('statusline help includes integration snippets', async () => {
+  const help = await runCli(['statusline', '--help']);
+  assert.equal(help.code, 0, help.stderr);
+  assert.match(help.stdout, /Claude Code statusline command/);
+  assert.match(help.stdout, /tmux/);
+  assert.match(help.stdout, /PowerShell prompt/);
+  assert.match(help.stdout, /only reads local SQLite/);
+});
+
 function seedStatuslineDb(timestamp) {
   const dir = mkdtempSync(join(tmpdir(), 'token-studio-statusline-'));
   const dbPath = join(dir, 'usage.sqlite');
+  const resetAnchor = new Date(new Date(timestamp).getTime() - 10 * 60 * 1000).toISOString();
   const db = openDb(dbPath);
   try {
     upsertTokenEvent(db, {
@@ -97,7 +107,10 @@ function seedStatuslineDb(timestamp) {
     upsertBudgetProfile(db, {
       source: 'Codex CLI',
       label: 'Codex 15m',
+      windowType: 'fixed',
       windowMinutes: 15,
+      resetAnchor,
+      warningThreshold: 0.7,
       tokenBudget: 1000
     });
     upsertAdvisorAction(db, {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.7.0
+
+- Added Dashboard ccusage CLI Bridge UX that only generates copyable local commands; the browser never runs external scanners.
+- Extended budget profiles to support `rolling` and `fixed` windows with `reset_anchor` and editable `warning_threshold`.
+- Updated `/live` and `token-studio statusline` to show quota window type, reset countdown, warning thresholds, and budget usage.
+- Added `docs/statusline.md` plus `token-studio statusline --help` integration snippets for Claude Code statusline, tmux, PowerShell, and JSON scripts.
+- Added `token-studio policy --format=markdown|claude-md|agents-md` to export a reusable ROI model-use playbook without editing project files.
+
 ## 4.6.0
 
 - Added `token-studio import-usage --format=ccusage-cli` to explicitly run `ccusage <report> --json --no-cost` and reuse the existing privacy-safe ccusage import planner.

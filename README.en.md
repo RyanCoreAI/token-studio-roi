@@ -25,14 +25,15 @@ See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller compet
 
 ## What Makes ROI Different?
 
-v4.6 focuses on decisions, not only metering, and uses a small CLI bridge to close coverage and live-entry gaps without turning Token Studio into a desktop widget or TUI clone:
+v4.7 focuses on decisions, not only metering, and uses a small CLI bridge, quota profiles, and statusline integrations to close coverage and live-entry gaps without turning Token Studio into a desktop widget or TUI clone:
 
 - **ROI Savings Simulator**: compares official-price model switching scenarios for exploration, testing, context prep, low-value, and abandoned work.
 - **ccusage JSON Import**: imports documented ccusage JSON output for broader structured usage coverage while recomputing costs with Token Studio official pricing.
-- **ccusage CLI Bridge**: explicitly runs `ccusage <report> --json --no-cost` and imports the structured result into Token Studio; non-interactive shells require `--yes`.
+- **ccusage CLI Bridge UX**: the Dashboard only generates copyable local commands; the browser never runs external scanners.
 - **Import / Budget Wizard**: paste or upload ccusage JSON in the Dashboard, dry-run first, inspect shape/session/event counts, unsafe fields, and unpriced models, then explicitly apply to SQLite.
-- **Budget Guardrails**: shows custom budget windows, burn projection, and near/over/exceeded warnings on `/live`.
+- **Quota Profiles v2**: supports rolling/fixed custom guardrail windows, reset anchors, warning thresholds, burn projection, reset countdown, and near/over/exceeded warnings on `/live`.
 - **Statusline Guardrails**: `token-studio statusline` prints recent-window tokens, burn rate, cache, budget usage, unpriced-model warnings, and open actions for terminal prompts, tmux, or Claude Code statusline.
+- **ROI Playbook Export**: `token-studio policy` exports Markdown, Claude Code, or AGENTS-style model-use snippets without editing project files.
 - **Advisor Action Loop**: turns Savings Simulator and ROI Advisor recommendations into open/done/dismissed actions and includes them in weekly Markdown reports.
 - **Collector Audit**: audits experimental collectors before upgrading support, without SQLite writes or full-path output.
 - **Work Evidence**: connects usage to projects, tasks, stages, value, output links, and work items.
@@ -66,6 +67,7 @@ node src/cli.mjs statusline --format=text
 node src/cli.mjs statusline --format=json --window-minutes=15
 node src/cli.mjs budget list
 node src/cli.mjs report --period=week --format=markdown
+node src/cli.mjs policy --format=agents-md
 node src/cli.mjs doctor
 node src/cli.mjs privacy-check
 ```
@@ -85,6 +87,7 @@ npx @ryan/token-studio-roi import-usage --help
 npx @ryan/token-studio-roi statusline --format=text
 npx @ryan/token-studio-roi budget list
 npx @ryan/token-studio-roi report --period=week --format=markdown
+npx @ryan/token-studio-roi policy --format=claude-md
 npx @ryan/token-studio-roi collect --sources=claude,codex
 npx @ryan/token-studio-roi doctor
 npx @ryan/token-studio-roi privacy-check
@@ -123,12 +126,12 @@ Non-interactive shells refuse collection unless `--yes` is passed.
 - ROI Savings Simulator: simulates model switching savings with official prices and keeps unpriced models out of dollar decisions.
 - ROI Advisor: local rules only, no LLM calls and no extra token usage.
 - Advisor Action Loop: add recommendations to an action list, mark them done or dismissed, and review trends without claiming causal savings.
-- Model Policy export: generates `MODEL_POLICY.md` from local structured history.
+- Model Policy / ROI Playbook export: generates Markdown, Claude Code, or AGENTS-style strategy snippets from local structured history without writing files.
 - ccusage Import Bridge: `token-studio import-usage --format=ccusage-json` imports saved structured JSON, and `--format=ccusage-cli` explicitly invokes ccusage CLI; both avoid conversation content and third-party cost estimates.
-- Import / Budget Wizard: dashboard entry for ccusage JSON dry-run/apply and budget-window creation.
-- Budget Guardrails: source-level custom token/cost budgets with near/over/exceeded warnings.
+- Import / Budget Wizard: dashboard entry for ccusage JSON dry-run/apply, ccusage CLI Bridge command generation, and budget-window creation.
+- Quota Profiles v2: source-level custom token/cost guardrails with rolling/fixed windows, reset anchors, warning thresholds, and near/over/exceeded warnings.
 - Live Monitor: `/live` shows recent 15-minute token, model, cache, burn-rate metadata, budget windows, and guardrail warnings.
-- Statusline Guardrails: `token-studio statusline --format=text|json` reads SQLite only and prints recent-window tokens, burn rate, cache, budget usage, reset countdown, unpriced-model warnings, and open Advisor Actions.
+- Statusline Guardrails: `token-studio statusline --format=text|json` reads SQLite only and prints recent-window tokens, burn rate, cache, budget usage, reset countdown, unpriced-model warnings, and open Advisor Actions; integration examples are in [docs/statusline.md](docs/statusline.md).
 - Collector Audit: `token-studio collectors --audit` returns a safe experimental-source summary without writing SQLite.
 - Terminal Report: `token-studio report --period=week --format=table|markdown|json` prints a quick ROI review summary.
 - Privacy check: scans for real DBs, AI log directories, `.env`, generated exports, personal paths, and likely secrets.
