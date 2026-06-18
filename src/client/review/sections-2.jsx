@@ -6,19 +6,72 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { U } from '../shared/utils.js';
 import { RU } from './utils.js';
+import { buildEfficiencyGuidance } from './efficiency-guidance.js';
+
+function ReviewTrustBanner({ state }) {
+  if (!state) return null;
+  return (
+    <section className={`story trust-banner trust-${state.tone}`}>
+      <div className="section-label">00 · 数据来源</div>
+      <h2 className="section-title">这是真实数据吗？</h2>
+      <p className="section-sub">{state.summary}</p>
+      <div className="trust-banner-grid">
+        <div>
+          <span>状态</span>
+          <strong>{state.title}</strong>
+          <p>{state.action}</p>
+        </div>
+        {(state.facts || []).map(fact => (
+          <div key={fact.label}>
+            <span>{fact.label}</span>
+            <strong>{fact.value}</strong>
+          </div>
+        ))}
+      </div>
+      {state.latestRun && (
+        <div className="trust-run">
+          最近采集：{state.latestRun.source || 'unknown'} · {state.latestRun.status || 'unknown'} · {state.latestRun.message || '无摘要'}
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ───────────────────────────────────────────────────────────────
 // Closure progress — real data acceptance gate
 // ───────────────────────────────────────────────────────────────
-function ClosureProgressSection({ progress }) {
+function ClosureProgressSection({ progress, trustState, projectCoverage, lazyState, onLazyAttribution }) {
   if (!progress) return null;
   const pct = Math.round(progress.completionShare * 100);
+  const recognizedShare = projectCoverage?.recognizedShare || 0;
+  const evidenceShare = projectCoverage?.attributionCompletionShare || progress.completionShare || 0;
 
   return (
     <section className="story closure-section">
       <div className="section-label">01 · 闭环</div>
-      <h2 className="section-title">真实数据闭环还差什么</h2>
-      <p className="section-sub">这里按双轨口径检查当前周期：人工确认仍是最高可信；自动高置信完整归因用于懒人模式先跑通复盘，但不等同人工事实。</p>
+      <h2 className="section-title">当前数据能不能用于复盘</h2>
+      <p className="section-sub">先分清三件事：token 是否采到、项目是否识别、ROI 证据是否足够。前两项可以自动完成，第三项需要自动草稿或人工确认。</p>
+
+      <div className="closure-readable-grid">
+        <ReadableGate
+          label="Token 已采到"
+          value={trustState?.trusted ? '可信' : '待确认'}
+          note={trustState?.trusted ? '已有 event 级 token 记录和 coverage gate。' : trustState?.summary || '需要先确认数据来源。'}
+          done={trustState?.trusted}
+        />
+        <ReadableGate
+          label="项目已识别"
+          value={`${Math.round(recognizedShare * 100)}%`}
+          note={`${projectCoverage?.projectCount || 0} 个项目；未知项目 ${projectCoverage?.unknownProjectCount || 0} 个。`}
+          done={recognizedShare >= 0.8}
+        />
+        <ReadableGate
+          label="ROI 证据待补"
+          value={`${Math.round(evidenceShare * 100)}%`}
+          note="还需要任务、目的、阶段、价值、产出链接或人工确认。"
+          done={evidenceShare >= 0.8}
+        />
+      </div>
 
       <div className={`closure-hero ${progress.status === 'complete' ? 'complete' : 'needs-work'}`}>
         <div>
@@ -75,30 +128,59 @@ function ClosureProgressSection({ progress }) {
           {progress.nextActions.slice(0, 3).map(action => (
             <p key={action}>{action}</p>
           ))}
+          <LazyAttributionButton
+            state={lazyState}
+            onClick={onLazyAttribution}
+          />
         </div>
       )}
     </section>
   );
 }
 
-function RoiEvidenceSection({ evidence }) {
+function ReadableGate({ label, value, note, done }) {
+  return (
+    <article className={`readable-gate ${done ? 'done' : 'todo'}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{note}</p>
+    </article>
+  );
+}
+
+function RoiEvidenceSection({ evidence, zeroState, lazyState, onLazyAttribution }) {
   if (!evidence) return null;
+  const showZeroState = zeroState?.isZero;
   return (
     <section className="story evidence-section">
       <div className="section-label">02 · 证据</div>
       <h2 className="section-title">这些 Token 是否足够支撑 ROI 判断</h2>
       <p className="section-sub">Token Studio ROI 不只统计消耗，还检查项目、任务、目的、阶段、价值、产出和人工确认是否完整。</p>
 
-      <div className="evidence-hero">
-        <div>
-          <span>ROI Evidence Score</span>
-          <strong>{evidence.evidenceScore}</strong>
-          <p>{evidence.complete} / {evidence.sessionCount} 个 session 证据完整 · {evidence.workItemCount} 个 work item</p>
+      {showZeroState ? (
+        <div className="evidence-zero-state">
+          <div>
+            <span>证据缺口</span>
+            <strong>{zeroState.title}</strong>
+            <p>{zeroState.summary}</p>
+          </div>
+          <ul>
+            {zeroState.missing.map(item => <li key={item}>{item}</li>)}
+          </ul>
+          <LazyAttributionButton state={lazyState} onClick={onLazyAttribution}/>
         </div>
-        <div className="evidence-meter" aria-hidden="true">
-          <span style={{width: `${Math.max(0, Math.min(100, evidence.evidenceScore))}%`}}/>
+      ) : (
+        <div className="evidence-hero">
+          <div>
+            <span>ROI Evidence Score</span>
+            <strong>{evidence.evidenceScore}</strong>
+            <p>{evidence.complete} / {evidence.sessionCount} 个 session 证据完整 · {evidence.workItemCount} 个 work item</p>
+          </div>
+          <div className="evidence-meter" aria-hidden="true">
+            <span style={{width: `${Math.max(0, Math.min(100, evidence.evidenceScore))}%`}}/>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="evidence-grid">
         <EvidenceStat label="人工确认" value={`${evidence.manualConfirmed}`} note={`${evidence.autoOrMissing} 个仍是自动或缺失`} />
@@ -257,6 +339,12 @@ function EfficiencySection({ daily, period }) {
   const cacheRate = totals.total ? (totals.cacheRead / totals.total) * 100 : 0;
   const ioRatio   = totals.output ? totals.input / totals.output : 0;
   const reasonPct = totals.total ? (totals.reasoning / totals.total) * 100 : 0;
+  const guidance = useMemo(() => buildEfficiencyGuidance({
+    cacheReuseRate: cacheRate,
+    inputOutputRatio: ioRatio,
+    reasoningShare: reasonPct,
+    hasReasoningTokens: totals.reasoning > 0
+  }), [cacheRate, ioRatio, reasonPct, totals.reasoning]);
 
   // sparklines for each metric over daily
   const daysArr = useMemo(() => RU.dailyTotals(daily, period), [daily, period]);
@@ -308,10 +396,11 @@ function EfficiencySection({ daily, period }) {
 
       <div className="eff-grid">
         <EffCard
-          label="Cache 命中率"
+          label="Cache 复用率"
           value={cacheRate.toFixed(1)}
           unit="%"
-          note={`每命中一次 cache，官方价约为普通输入价的一部分。本期一共节省 ${U.compactCN(totals.cacheRead)} tokens 的重复计算。`}
+          note={`本期 ${U.compactCN(totals.cacheRead)} tokens 来自 cache read。这里是本地复盘口径，不是供应商精确 hit rate。`}
+          guidance={guidance.cache}
           spark={cacheSeries}
           color="oklch(0.55 0.16 265)"/>
         <EffCard
@@ -319,6 +408,7 @@ function EfficiencySection({ daily, period }) {
           value={ioRatio.toFixed(1)}
           unit=":1"
           note={`平均喂给模型 ${ioRatio.toFixed(1)} 个 token，模型生成 1 个。比值越低说明指令越紧凑、生成越密集。`}
+          guidance={guidance.io}
           spark={ioSeries}
           color="oklch(0.65 0.11 200)"/>
         <EffCard
@@ -326,6 +416,7 @@ function EfficiencySection({ daily, period }) {
           value={reasonPct.toFixed(1)}
           unit="%"
           note={`推理 token 比例越高，说明你交给模型的任务越复杂——通常对应代码重构、调试或多步规划。`}
+          guidance={guidance.reasoning}
           spark={reasonSeries}
           color="oklch(0.65 0.12 150)"/>
       </div>
@@ -333,13 +424,20 @@ function EfficiencySection({ daily, period }) {
   );
 }
 
-function EffCard({ label, value, unit, note, spark, color }) {
+function EffCard({ label, value, unit, note, guidance, spark, color }) {
   return (
     <div className="eff-card">
       <div className="eff-label">{label}</div>
       <div className="eff-value">
         {value}<span className="unit">{unit}</span>
       </div>
+      {guidance && (
+        <div className={`eff-guidance eff-guidance-${guidance.tone}`}>
+          <span>{guidance.label} · {guidance.range}</span>
+          <p>{guidance.advice}</p>
+          <small>{guidance.source}</small>
+        </div>
+      )}
       <p className="eff-note">{note}</p>
       {spark && spark.length > 0 && (
         <div className="eff-spark">
@@ -374,7 +472,7 @@ function MiniSpark({ values, color }) {
 // ───────────────────────────────────────────────────────────────
 // Savings simulator — official-price model switching simulation
 // ───────────────────────────────────────────────────────────────
-function SavingsSimulatorSection({ simulation, actionsByRule = new Map(), onAddAction, onSetActionStatus }) {
+function SavingsSimulatorSection({ simulation, emptyReason, lazyState, actionsByRule = new Map(), onAddAction, onSetActionStatus, onLazyAttribution }) {
   if (!simulation) return null;
   const suggestions = simulation.suggestions || [];
   const unpriced = simulation.unpriced || {};
@@ -442,7 +540,16 @@ function SavingsSimulatorSection({ simulation, actionsByRule = new Map(), onAddA
           ))}
         </div>
       ) : (
-        <div className="no-data">当前周期没有触发可计算的官方价节省建议。高价值已完成/已发布任务不会被建议降级模型。</div>
+        <div className="savings-empty">
+          <h3>{emptyReason?.title || '当前周期没有触发可计算的官方价节省建议'}</h3>
+          <ul>
+            {(emptyReason?.reasons || ['高价值已完成/已发布任务不会被建议降级模型。']).map(reason => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+          <p>{emptyReason?.action || '补齐任务、阶段和价值后再看节省模拟。'}</p>
+          <LazyAttributionButton state={lazyState} onClick={onLazyAttribution}/>
+        </div>
       )}
 
       {unpriced.sessionCount > 0 && (
@@ -749,7 +856,7 @@ async function copyText(text) {
 // ───────────────────────────────────────────────────────────────
 // Model Strategy — what model should be used for which work
 // ───────────────────────────────────────────────────────────────
-function ModelStrategySection({ strategy }) {
+function ModelStrategySection({ strategy, lazyState, onLazyAttribution }) {
   if (!strategy) return null;
   const coverage = strategy.coverage;
   const taskRows = strategy.byTaskType.slice(0, 4);
@@ -774,6 +881,33 @@ function ModelStrategySection({ strategy }) {
           <p>占本期 {coverage.totalTokens ? ((coverage.annotatedTokenShare) * 100).toFixed(1) : '0.0'}%</p>
         </div>
       </div>
+
+      {coverage.annotatedSessionCount === 0 && strategy.modelRows.length > 0 && (
+        <div className="strategy-facts">
+          <div className="strategy-facts-head">
+            <div>
+              <span>先看事实</span>
+              <h3>还没标注任务，但模型用量已经可见</h3>
+              <p>下面是当前周期按模型聚合的真实 token、来源和官方价。策略建议需要补任务、阶段或价值后才会变准。</p>
+            </div>
+            <LazyAttributionButton state={lazyState} onClick={onLazyAttribution}/>
+          </div>
+          <div className="strategy-fact-list">
+            {strategy.modelRows.slice(0, 5).map(row => (
+              <div key={row.model} className="strategy-fact-row">
+                <div>
+                  <strong>{row.model}</strong>
+                  <span>{tierLabel(row.tier)} · {row.sessionCount} sessions · 占 {((row.share || 0) * 100).toFixed(1)}%</span>
+                </div>
+                <div>
+                  <b>{U.compactCN(row.totalTokens)}</b>
+                  <span>{row.costUSD > 0 ? U.fmtUS.format(row.costUSD) : '未定价/无官方价'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="strategy-playbook">
         {strategy.playbook.map(row => (
@@ -924,4 +1058,17 @@ function InsightsSection({ insights }) {
   );
 }
 
-export { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection };
+export { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection, ReviewTrustBanner };
+
+function LazyAttributionButton({ state, onClick }) {
+  return (
+    <div className="lazy-attribution-action">
+      <button type="button" disabled={state?.busy} onClick={onClick}>
+        {state?.busy ? '归因中…' : '一键懒人归因'}
+      </button>
+      <p>只写入高置信自动草稿，不覆盖人工标注。</p>
+      {state?.message && <strong>{state.message}</strong>}
+      {state?.error && <b>{state.error}</b>}
+    </div>
+  );
+}

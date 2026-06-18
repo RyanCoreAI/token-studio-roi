@@ -6,13 +6,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { U } from '../shared/utils.js';
 import { RU } from './utils.js';
 import { HeroSection, ProjectSection, CalendarSection } from './sections-1.jsx';
-import { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection } from './sections-2.jsx';
+import { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection, ReviewTrustBanner } from './sections-2.jsx';
 import { buildRoiAdvisor } from './roi-advisor.js';
 import { buildMarkdownReviewReport, buildReviewReportFilename } from './markdown-report.js';
 import { buildModelStrategy } from './model-strategy.js';
 import { buildReviewClosureProgress } from './closure-progress.js';
 import { buildRoiEvidence } from './roi-evidence.js';
 import { buildSavingsSimulation } from './savings-simulator.js';
+import { buildReviewTrustState } from './review-trust.js';
+import { buildEvidenceZeroState, buildSavingsEmptyReason } from './review-empty-states.js';
 import './styles.css';
 
 export function ReviewApp() {
@@ -20,12 +22,17 @@ export function ReviewApp() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
+    setError(null);
     fetch('/api/data')
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(d => { setData(d); setLoading(false); })
       .catch(e => { setError(e.message); setLoading(false); });
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   if (loading) {
     return (
@@ -61,16 +68,17 @@ export function ReviewApp() {
     );
   }
 
-  return <ReviewDashboard rawData={data}/>;
+  return <ReviewDashboard rawData={data} onReloadData={loadData}/>;
 }
 
-function ReviewDashboard({ rawData }) {
+function ReviewDashboard({ rawData, onReloadData }) {
   const TODAY = new Date();
   TODAY.setHours(0, 0, 0, 0);
 
   const [periodId, setPeriodId] = useState('month');
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [advisorActions, setAdvisorActions] = useState(rawData.advisorActions || []);
+  const [lazyAttributionState, setLazyAttributionState] = useState({ busy: false, message: '', error: '' });
   const pageRefs = useRef([]);
   const period = useMemo(() => RU.getPeriod(periodId, TODAY, rawData.daily), [periodId, rawData.daily]);
   const prevPeriod = useMemo(() => period.prev
@@ -149,6 +157,15 @@ function ReviewDashboard({ rawData }) {
   const savingsSimulation = useMemo(() =>
     buildSavingsSimulation({ sessions, daily, pricingMeta: rawData.meta?.officialPricing || null })
   , [sessions, daily, rawData.meta]);
+  const trustState = useMemo(() =>
+    buildReviewTrustState(rawData.meta || {})
+  , [rawData.meta]);
+  const evidenceZeroState = useMemo(() =>
+    buildEvidenceZeroState(roiEvidence, rawData.meta?.projectCoverage || {})
+  , [roiEvidence, rawData.meta]);
+  const savingsEmptyReason = useMemo(() =>
+    buildSavingsEmptyReason({ simulation: savingsSimulation, sessions })
+  , [savingsSimulation, sessions]);
   const markdownReport = useMemo(() =>
     buildMarkdownReviewReport({ period, daily, sessions, workItems: rawData.workItems || [], roiAdvice, insights, savingsSimulation, advisorActions })
   , [period, daily, sessions, rawData.workItems, roiAdvice, insights, savingsSimulation, advisorActions]);
@@ -201,6 +218,34 @@ function ReviewDashboard({ rawData }) {
     persistAdvisorAction({ ...action, status })
   , [persistAdvisorAction]);
 
+  const applyLazyAttribution = useCallback(async () => {
+    setLazyAttributionState({ busy: true, message: '', error: '' });
+    try {
+      const response = await fetch('/api/auto-attribution/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+      const result = await response.json();
+      setLazyAttributionState({
+        busy: false,
+        message: `已应用 ${result.applied ?? 0} 条高置信自动归因；自动推断不等同人工确认。`,
+        error: ''
+      });
+      await onReloadData?.();
+    } catch (error) {
+      setLazyAttributionState({
+        busy: false,
+        message: '',
+        error: error.message || '自动归因失败'
+      });
+    }
+  }, [onReloadData]);
+
   // Period nav
   const ORDER = ['week', 'month', 'prev', '90d', 'all'];
   const idx = ORDER.indexOf(periodId);
@@ -237,19 +282,35 @@ function ReviewDashboard({ rawData }) {
       id: 'overview',
       label: '总览',
       className: 'page',
-      content: <HeroSection period={period} totals={totals} prevTotals={prevTotals} stats={heroStats}/>
+      content: (
+        <>
+          <ReviewTrustBanner state={trustState}/>
+          <HeroSection period={period} totals={totals} prevTotals={prevTotals} stats={heroStats}/>
+        </>
+      )
     },
     {
       id: 'evidence',
       label: 'ROI 证据',
       className: 'page',
-      content: <RoiEvidenceSection evidence={roiEvidence}/>
+      content: <RoiEvidenceSection
+        evidence={roiEvidence}
+        zeroState={evidenceZeroState}
+        lazyState={lazyAttributionState}
+        onLazyAttribution={applyLazyAttribution}
+      />
     },
     {
       id: 'closure',
       label: '闭环',
       className: 'page',
-      content: <ClosureProgressSection progress={closureProgress}/>
+      content: <ClosureProgressSection
+        progress={closureProgress}
+        trustState={trustState}
+        projectCoverage={rawData.meta?.projectCoverage}
+        lazyState={lazyAttributionState}
+        onLazyAttribution={applyLazyAttribution}
+      />
     },
     {
       id: 'projects',
@@ -283,9 +344,12 @@ function ReviewDashboard({ rawData }) {
       className: 'page',
       content: <SavingsSimulatorSection
         simulation={savingsSimulation}
+        emptyReason={savingsEmptyReason}
+        lazyState={lazyAttributionState}
         actionsByRule={actionsByRule}
         onAddAction={addAdvisorAction}
         onSetActionStatus={setAdvisorActionStatus}
+        onLazyAttribution={applyLazyAttribution}
       />
     },
     {
@@ -313,7 +377,11 @@ function ReviewDashboard({ rawData }) {
       id: 'strategy',
       label: '模型策略',
       className: 'page',
-      content: <ModelStrategySection strategy={modelStrategy}/>
+      content: <ModelStrategySection
+        strategy={modelStrategy}
+        lazyState={lazyAttributionState}
+        onLazyAttribution={applyLazyAttribution}
+      />
     },
     {
       id: 'insights',
@@ -321,7 +389,7 @@ function ReviewDashboard({ rawData }) {
       className: 'page',
       content: <InsightsSection insights={insights}/>
     }
-  ], [period, totals, prevTotals, heroStats, roiEvidence, closureProgress, daily, roiAdvice, savingsSimulation, modelStrategy, insights, actionsByRule, periodAdvisorActions, addAdvisorAction, setAdvisorActionStatus]);
+  ], [period, totals, prevTotals, heroStats, trustState, roiEvidence, evidenceZeroState, lazyAttributionState, applyLazyAttribution, closureProgress, rawData.meta, daily, roiAdvice, savingsSimulation, savingsEmptyReason, modelStrategy, insights, actionsByRule, periodAdvisorActions, addAdvisorAction, setAdvisorActionStatus]);
 
   const goToReviewPage = useCallback((index) => {
     const nextIndex = Math.max(0, Math.min(reviewPages.length - 1, index));

@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import packageJson from '../package.json' with { type: 'json' };
 
 test('CLI help exposes bare auto entrypoint', async () => {
   const result = await runNode(['src/cli.mjs', '--help']);
@@ -34,7 +35,7 @@ test('bare CLI auto apply writes trusted event usage before starting UI', async 
 
   try {
     const data = await waitForData(apiPort);
-    assert.equal(data.meta.runtime.packageVersion, '4.8.6');
+    assert.equal(data.meta.runtime.packageVersion, packageJson.version);
     assert.equal(data.meta.runtime.counts.tokenEventRows, 1);
     assert.equal(data.meta.dataMode.id, 'real-event-verified');
   } finally {

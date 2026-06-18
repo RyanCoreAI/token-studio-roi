@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.8.7
+
+- Added `/review` data-source trust messaging so users can distinguish demo, old aggregate databases, old services, and real event-verified token data.
+- Reworked ROI evidence, savings simulation, and model strategy zero states so missing attribution becomes an actionable gap instead of an unexplained `0`.
+- Added local efficiency guidance ranges for cache reuse, input/output ratio, and reasoning share with clear non-benchmark wording.
+- Added a `/review` lazy attribution action that reuses the existing high-confidence auto-attribution API and does not overwrite manual labels.
+
 ## 4.8.6
 
 - Added `npm run smoke:npx` as a release-blocking tarball install smoke for the real npm/npx user path.

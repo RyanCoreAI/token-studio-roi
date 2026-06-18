@@ -1,6 +1,6 @@
 {
   "name": "token-studio",
-  "version": "4.8.6",
+  "version": "4.8.7",
   "description": "Local AI coding ROI studio for private token, output, and model strategy review.",
   "type": "module",
   "bin": {
