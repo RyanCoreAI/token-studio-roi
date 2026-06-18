@@ -27,7 +27,7 @@ Token Studio ROI is positioned as a local AI coding ROI review system, not only 
 - Collector Audit: safely checks experimental collector viability before upgrading support level, instead of inflating source count with unreliable estimates.
 - Terminal ROI Report: quick CLI summary of total tokens, official-price cost, project/model ranking, budget risks, and Advisor Actions.
 - Public safety: demo mode, privacy-check, `NOTICE.md`, no real SQLite in git, no prompt/response export.
-- Launch path: `npx token-studio demo` after npm publication, with `git clone && npm run demo` kept as the source checkout path.
+- Launch path: `npx token-studio` after npm publication for real local collection, with `npx token-studio demo` kept as the synthetic walkthrough path.
 - v4.1 coverage path: experimental Cursor, Copilot CLI, Qwen Code, Kimi, and Goose collectors skip records without explicit token fields.
 
 ## v4.3 High-ROI Product Bet
@@ -71,7 +71,7 @@ This closes practical gaps with terminal-first competitors while preserving the 
 
 v4.8 makes the public launch path easier to try and easier to explain:
 
-- npm one-command launch: `npx token-studio demo` should get a new user into synthetic demo data within 30 seconds.
+- npm one-command launch: `npx token-studio` should run coverage, import trusted Claude/Codex event rows, and open the browser; `demo` remains a synthetic walkthrough.
 - Source Health Center: show native stable, experimental, detected-only, and ccusage import-bridge support honestly, including detected status, recent rows, token-field trust, and privacy boundaries.
 - ccusage bridge as coverage shortcut: use ccusage's broad ecosystem through explicit JSON/CLI import while still recomputing costs with Token Studio official-price logic.
 - README first screen: position Token Studio ROI around Work Evidence, Savings Simulator, and Model Policy instead of competing only as a token meter.

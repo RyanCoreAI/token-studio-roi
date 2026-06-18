@@ -86,6 +86,41 @@ test('v4.6 CLI bridge reports external command failures clearly', async () => {
   }
 });
 
+test('compare-ccusage reports token coverage differences without writing SQLite', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'token-studio-compare-ccusage-'));
+  const mock = createMockCcusage(dir);
+  const configPath = join(dir, 'collectors.json');
+  writeFileSync(configPath, JSON.stringify({
+    collectors: {
+      claude: { roots: [join(dir, 'missing-claude')], includeDesktopLocalAgent: false },
+      codex: { homes: [join(dir, 'missing-codex')], sessionSubdirs: ['sessions'] },
+      cursor: { roots: [join(dir, 'missing-cursor')] }
+    }
+  }), 'utf8');
+  try {
+    const result = await runCli([
+      'compare-ccusage',
+      '--report=session',
+      '--ccusage-bin',
+      mock,
+      '--sources=claude,codex',
+      '--yes',
+      '--json'
+    ], {
+      TOKEN_STUDIO_CONFIG: configPath,
+      NODE_OPTIONS: '--no-warnings'
+    });
+    assert.equal(result.code, 2, result.stderr);
+    const body = JSON.parse(result.stdout);
+    assert.equal(body.ok, false);
+    assert.equal(body.tokenStudio.totalTokens, 0);
+    assert.equal(body.ccusage.totalTokens, 125);
+    assert.match(body.note, /ignores ccusage cost/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 function createMockCcusage(dir) {
   const scriptPath = join(dir, 'mock-ccusage.mjs');
   writeFileSync(scriptPath, [

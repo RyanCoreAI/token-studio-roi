@@ -5,8 +5,10 @@
 **Local AI Coding ROI Studio.** Token Studio ROI 不只是 token meter，而是一个本地隐私优先的 AI 编程复盘工具：记录 token 和官方价换算成本，连接项目、任务、工作阶段、产出证据和模型策略。
 
 ```bash
-npx token-studio demo
+npx token-studio
 ```
+
+默认命令会先做本机只读 coverage，再把 Claude/Codex 的可信 event 级 token 记录写入本地 SQLite，最后打开浏览器。`demo` 只用于合成演示数据。
 
 首屏只需要记住三个差异：
 
@@ -14,7 +16,7 @@ npx token-studio demo
 - **Savings Simulator**：按官方公开 token 价格模拟模型切换后的节省空间。
 - **Model Policy**：把历史用量转成下周轻量/中等/重模型使用策略。
 
-默认不读取、不展示、不上传对话正文。真实采集必须显式确认。
+默认不读取、不展示、不上传对话正文；只读取结构化 token/model/time/session 元数据。
 
 ## Why Not ccusage / CodeBurn?
 
@@ -34,6 +36,7 @@ Token Studio ROI 的 v4.8 重点不是再堆一个 token meter，而是把统计
 - **ccusage JSON Import**：兼容 ccusage documented JSON output，借它的多源生态导入结构化 token 数据，但成本仍由 Token Studio 官方价函数重算。
 - **ccusage CLI Bridge UX**：Dashboard 只生成可复制命令，不从浏览器运行外部扫描器；真实 bridge 仍由用户在本地终端显式执行。
 - **Source Health Center**：显示 native stable、experimental、detected-only、ccusage import-bridge 的状态、最近用量、token 字段可信度和隐私边界，不输出完整本机路径。
+- **Collection Coverage Gate**：真实采集前先跑 `token-studio coverage`，确认 Claude/Codex 是否有 event 级历史、Cursor 是否只有 detected-only，避免把目录检测误认为采集成功。
 - **Import / Budget Wizard**：在 Dashboard 里粘贴或上传 ccusage JSON，先 dry-run 看 shape、session/event 数、unsafe 字段和未定价模型，确认后才写 SQLite。
 - **Quota Profiles v2**：支持 rolling/fixed 自定义限额窗口、reset anchor、warning threshold，在 `/live` 看到 burn projection、reset countdown 和 near/over/exceeded warnings。
 - **Statusline Guardrails**：`token-studio statusline` 输出最近窗口 token、burn rate、cache、预算使用率、未定价模型提示和 open actions，适配终端 prompt、tmux 或 Claude Code statusline。
@@ -49,21 +52,29 @@ Token Studio ROI 的 v4.8 重点不是再堆一个 token meter，而是把统计
 推荐 Node.js 24，最低 Node.js `>=22.12.0`。
 
 ```bash
-npx token-studio demo
+npx token-studio
 ```
 
 预期输出类似：
 
 ```text
-[demo] seeded 3 sessions and 2 daily rows into .../data/demo.sqlite
-[token-studio] UI  http://127.0.0.1:5173/  (Demo Mode)
+[token-studio] coverage claude,codex,cursor (read-only)
+[token-studio] collect applied: sessions +..., token_events +...
+[token-studio] UI  http://127.0.0.1:5173/
 [token-studio] API http://127.0.0.1:4173
 ```
 
 常用命令：
 
 ```bash
+npx token-studio
+npx token-studio --no-collect
+npx token-studio --dry-run-only
+npx token-studio demo
 npx token-studio start
+npx token-studio coverage --sources=claude,codex,cursor --json
+npx token-studio collect --dry-run --sources=claude,codex,cursor --json
+npx token-studio collect --apply --yes --sources=claude,codex
 npx token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes
 npx token-studio statusline --format=text
 npx token-studio collectors
@@ -76,10 +87,10 @@ npx token-studio privacy-check
 git clone https://github.com/RyanCoreAI/token-studio-roi.git
 cd token-studio-roi
 npm install
-npm run demo
+node src/cli.mjs
 ```
 
-`demo` 使用合成数据，不扫描真实 `.claude`、`.codex`、Cursor 或 Copilot 日志。`start` 只读取已有 SQLite，不自动采集。`ccusage-cli` bridge 会显式运行外部 ccusage 本地扫描器；Token Studio 只接收结构化 JSON，拒绝 conversation-like 字段，并忽略第三方 cost 字段。
+`npx token-studio` 会扫描本机 `.claude`、`.codex` 和 Cursor 的结构化 token 元数据；只会自动写入 Claude/Codex 的可信 event 级记录，Cursor 没有明确 token 字段时只显示 detected/no-token-fields。`--no-collect` 只启动已有 SQLite，`--dry-run-only` 只做 coverage 不写库，`demo` 使用合成数据。默认 DB 路径是当前运行目录的 `data/usage.sqlite`；可用 `--db` 或 `DB_PATH` 指定位置。Dashboard 会显示“数据来源状态”：Demo Mode、Empty DB、Real DB - aggregate only、Real DB - event data needs coverage 或 Real DB - event verified。`event verified` 需要 token events 加上通过的 coverage gate 或可验证的 collect run。`ccusage-cli` bridge 会显式运行外部 ccusage 本地扫描器；Token Studio 只接收结构化 JSON，拒绝 conversation-like 字段，并忽略第三方 cost 字段。
 
 首次使用流程见 [docs/first-run.md](docs/first-run.md)。Dashboard 也会根据当前数据状态显示“首次使用”引导：无数据时提示 demo/import，有数据但无 action 时提示去 `/review`，有预算但无事件级 live 数据时解释 `/live` 的窗口口径。
 
@@ -93,13 +104,18 @@ npm run demo
 
 ![Token Studio ROI live guardrails](docs/assets/token-studio-v45-live.png)
 
-真实采集需要显式确认：
+高级排错命令：
 
 ```bash
-npx token-studio collect --sources=claude,codex
+npx token-studio coverage --sources=claude,codex,cursor --json
+npx token-studio collect --dry-run --sources=claude,codex,cursor
+npx token-studio collect --apply --yes --sources=claude,codex
+npx token-studio compare-ccusage --report=session --json --yes
 ```
 
-非交互环境不会自动扫描本机日志；需要显式 `--yes` 才会继续。
+`coverage` 和 `--dry-run` 都只输出候选文件数、可解析 token 记录数、跳过原因、历史时间范围以及 daily/session/event token 合计，不写 SQLite。`--apply` 写入前会备份 SQLite；如果 Claude/Codex 有可解析 token 记录但将写入的 `token_events` 为 0，或者 daily/session/event 总量差异超过 1%，会被 coverage gate 阻止。Cursor 只有本地 `state.vscdb` 里存在明确 token 字段时才写入用量，否则显示“检测到但无可靠 token 字段”，不估算造数。
+
+Token Studio 不能承诺恢复所有历史。它只能覆盖本机仍保留、且日志里有可靠 token 字段的历史；已被上游清理或从未记录 token 字段的数据无法复原。
 
 ## Core Features
 
@@ -115,6 +131,7 @@ npx token-studio collect --sources=claude,codex
 - Model Policy / ROI Playbook：导出 Markdown、Claude Code 或 AGENTS 风格策略片段，把历史用量转成下周模型使用策略，不自动写文件。
 - ccusage Import Bridge：`token-studio import-usage --format=ccusage-json` 导入保存的结构化 JSON，`--format=ccusage-cli` 显式调用 ccusage CLI；两者都不保存正文，不采用第三方估算成本。
 - Source Health Center：Dashboard 和 `/api/source-health` 展示来源支持级别、检测状态、最近导入/采集摘要和 token 字段可信度，不泄露完整本机路径。
+- Collection Coverage Gate：`token-studio coverage`、`GET /api/collection-coverage` 和 Dashboard “真实采集可信度”卡片展示历史范围、event/session/daily 一致性、未覆盖来源和失败原因。
 - Import / Budget Wizard：Dashboard 内置 ccusage JSON dry-run/apply、ccusage CLI Bridge 命令生成器和预算窗口创建入口。
 - Quota Profiles v2：自定义 source 级 token/cost 预算窗口，支持 rolling/fixed、reset anchor 和 warning threshold，`/live` 显示 near/over/exceeded warnings。
 - Live Monitor：`/live` 轻量监控最近 15 分钟 token、模型、cache、burn rate、预算窗口和 guardrail warnings。
@@ -205,6 +222,9 @@ npm run dev
 - [ ] `npm test`
 - [ ] `npm run build`
 - [ ] `npm run privacy:check`
+- [ ] `node src/cli.mjs coverage --sources=claude,codex,cursor --json`
+- [ ] `npm view token-studio version` is lower than this package version before publishing
+- [ ] `npm pack --dry-run`
 - [ ] demo screenshots come from demo mode
 - [ ] `/live` loads from demo mode or temporary SQLite
 - [ ] no real `data/usage.sqlite`

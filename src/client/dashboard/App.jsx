@@ -48,6 +48,9 @@ export function App() {
   const [collecting, setCollecting] = useState(false);
   const [collectStatus, setCollectStatus] = useState(null);
   const [collectConfirmOpen, setCollectConfirmOpen] = useState(false);
+  const [collectionCoverage, setCollectionCoverage] = useState(null);
+  const [coverageLoading, setCoverageLoading] = useState(false);
+  const [coverageError, setCoverageError] = useState(null);
 
   // ───── Load data from API ─────
   const loadData = useCallback(() => {
@@ -89,6 +92,27 @@ export function App() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const loadCollectionCoverage = useCallback(() => {
+    setCoverageLoading(true);
+    return fetch('/api/collection-coverage')
+      .then(async r => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        setCollectionCoverage(data);
+        setCoverageError(null);
+        return data;
+      })
+      .catch(error => {
+        setCoverageError(error.message || '采集可信度检查失败');
+        return null;
+      })
+      .finally(() => setCoverageLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (M?.meta?.demoMode) loadCollectionCoverage();
+  }, [M?.meta?.demoMode, loadCollectionCoverage]);
+
   const syncCollectStatus = useCallback((options = {}) => {
     return fetch('/api/collect/status')
       .then(r => {
@@ -102,7 +126,10 @@ export function App() {
         } else if (data.status === 'ok') {
           setCollecting(false);
           setCollectStatus({ type: 'ok', message: summarizeCollectOutput(data.stdout) });
-          if (options.refreshOnDone) loadData();
+          if (options.refreshOnDone) {
+            loadData();
+            loadCollectionCoverage();
+          }
         } else if (data.status === 'error') {
           setCollecting(false);
           setCollectStatus({ type: 'error', message: data.stderr || data.message || '采集失败' });
@@ -111,7 +138,7 @@ export function App() {
         }
         return data;
       });
-  }, [loadData]);
+  }, [loadData, loadCollectionCoverage]);
 
   const waitForCollectDone = useCallback(async () => {
     for (;;) {
@@ -411,8 +438,12 @@ export function App() {
         refreshing={refreshing}
         collecting={collecting}
         collectStatus={collectStatus}
+        collectionCoverage={collectionCoverage}
+        coverageLoading={coverageLoading}
+        coverageError={coverageError}
         onRefresh={loadData}
         onCollect={requestCollect}
+        onLoadCollectionCoverage={loadCollectionCoverage}
         onSaveAnnotation={saveSessionAnnotation}
         onBatchSaveAnnotations={batchSaveSessionAnnotations}
         onDeleteAnnotation={deleteSessionAnnotation}
@@ -449,8 +480,12 @@ function Dashboard({
   refreshing,
   collecting,
   collectStatus,
+  collectionCoverage,
+  coverageLoading,
+  coverageError,
   onRefresh,
   onCollect,
+  onLoadCollectionCoverage,
   onSaveAnnotation,
   onBatchSaveAnnotations,
   onDeleteAnnotation,
@@ -584,7 +619,6 @@ function Dashboard({
     buildPendingConfirmationSessions(filteredSessionsWithAutoSuggestions)
   , [filteredSessionsWithAutoSuggestions]);
   const firstRunState = useMemo(() => buildFirstRunState(M), [M]);
-
   const filteredRuns = useMemo(() => {
     return M.runs.filter(r =>
       (effectiveFilters.sources.size === 0 || effectiveFilters.sources.has(r.source)) &&
@@ -740,70 +774,19 @@ function Dashboard({
         </div>
       )}
 
-      <FirstRunPanel
-        state={firstRunState}
-        onOpenImportBudget={() => setImportBudgetOpen(true)} />
-      <SourceHealthPanel
-        rows={M.meta?.sourceHealth || []}
-        onOpenImportBudget={() => setImportBudgetOpen(true)} />
-
-      {/* KPI row */}
-      <div className="kpi-row">
-        <KPI label="总 Token" value={U.compactCN(totals.totalTokens)}
-          sub="vs 上周期"
-          delta={U.deltaPct(totals.totalTokens, compareData.totals?.totalTokens)}
-          sparkValues={sparkValues} sparkColor="oklch(0.55 0.16 265)" />
-        <KPI label="Input" value={U.compactCN(totals.inputTokens)}
-          sub="输入"
-          delta={U.deltaPct(totals.inputTokens, compareData.totals?.inputTokens)}
-          sparkValues={sparkBy('inputTokens')} sparkColor="oklch(0.62 0.13 240)" />
-        <KPI label="Output" value={U.compactCN(totals.outputTokens)}
-          sub="生成"
-          delta={U.deltaPct(totals.outputTokens, compareData.totals?.outputTokens)}
-          sparkValues={sparkBy('outputTokens')} sparkColor="oklch(0.60 0.15 295)" />
-        <KPI label="Cache" value={U.compactCN(totals.cacheTokens)}
-          sub={`命中 ${totals.cacheHitRate.toFixed(0)}%`}
-          delta={U.deltaPct(totals.cacheTokens, compareData.totals?.cacheTokens)}
-          sparkValues={sparkBy('cacheReadTokens')} sparkColor="oklch(0.65 0.11 200)" />
-        <KPI label="Reasoning" value={U.compactCN(totals.reasoningTokens)}
-          sub="推理"
-          delta={U.deltaPct(totals.reasoningTokens, compareData.totals?.reasoningTokens)}
-          sparkValues={sparkBy('reasoningOutputTokens')} sparkColor="oklch(0.65 0.12 150)" />
-        <KPI label="官方价账单" value={U.fmtUS.format(totals.costUSD)}
-          sub="按官网单价"
-          delta={U.deltaPct(totals.costUSD, compareData.totals?.costUSD)}
-          sparkValues={sparkBy('costUSD')} sparkColor="oklch(0.72 0.14 75)" />
-      </div>
-
-      <OfficialPricingNotice meta={M.meta?.officialPricing} visibleCostUSD={totals.costUSD} />
-      <ModelUsageOverview
-        rows={modelUsageRows}
-        selectedModels={filters.models}
-        onToggleModel={toggleModelFilter}
-        onClearModels={clearModelFilter} />
-      <AutoAttributionPanel
-        plan={autoAttributionPlan}
-        busy={autoAttributionBusy}
-        message={autoAttributionMessage}
-        lastRunId={lastAutoRunId}
-        onApply={applyHighConfidenceAutoAttribution}
-        onUndo={undoLastAutoAttribution} />
-      <AttributionOverview
-        rows={attributionStatusSummary}
-        totalTokens={sessionTotals.totalTokens}
-        totalSessions={sessionTotals.sessionCount}
-        onQuickAttribute={() => {
-          setQuickAttributionError(null);
-          setQuickAttributionOpen(true);
-        }} />
-      <RoiReview
-        riskRows={riskDistribution}
-        projectRows={projectRoiRows}
-        weeklyReview={weeklyReview}
-        totalTokens={sessionTotals.totalTokens} />
+      <DataSourceStatusPanel
+        runtime={M.meta?.runtime}
+        coverage={collectionCoverage}
+        coverageLoading={coverageLoading}
+        coverageError={coverageError}
+        collecting={collecting}
+        collectStatus={collectStatus}
+        onRunCoverage={onLoadCollectionCoverage}
+        onStartCollect={onCollect}
+        onRefresh={onRefresh} />
 
       {/* Charts grid */}
-      <div className="grid">
+      <div className="grid dashboard-chart-grid">
         <div className="col-8">
           <TrendChart
             rows={filtered}
@@ -828,7 +811,7 @@ function Dashboard({
         <div className="col-6">
           <TopModels rows={filtered} onDrillModel={r => setDrill({ kind: 'model', row: r })} />
         </div>
-        <div className="col-3" style={{ gridColumn: 'span 3' }}>
+        <div className="col-3">
           <Gauge
             rate={totals.cacheHitRate}
             cacheRead={totals.cacheReadTokens}
@@ -836,14 +819,86 @@ function Dashboard({
             total={totals.totalTokens}
             prevRate={compareData.totals?.cacheHitRate} />
         </div>
-        <div className="col-3" style={{ gridColumn: 'span 3' }}>
+        <div className="col-3">
           <GrowthPanel totalsByDay={dailyTotalsByDay} />
         </div>
 
-        <div className="col-12">
-          <Heatmap rows={filtered} dates={dates} hourlyPattern={M.HOURLY} />
-        </div>
+      </div>
 
+      {/* KPI row */}
+      <div className="kpi-row">
+        <KPI label="总 Token" value={U.compactCN(totals.totalTokens)}
+          sub="vs 上周期"
+          delta={U.deltaPct(totals.totalTokens, compareData.totals?.totalTokens)}
+          sparkValues={sparkValues} sparkColor="oklch(0.55 0.16 265)" />
+        <KPI label="输入 Token" value={U.compactCN(totals.inputTokens)}
+          sub="输入"
+          delta={U.deltaPct(totals.inputTokens, compareData.totals?.inputTokens)}
+          sparkValues={sparkBy('inputTokens')} sparkColor="oklch(0.62 0.13 240)" />
+        <KPI label="输出 Token" value={U.compactCN(totals.outputTokens)}
+          sub="生成"
+          delta={U.deltaPct(totals.outputTokens, compareData.totals?.outputTokens)}
+          sparkValues={sparkBy('outputTokens')} sparkColor="oklch(0.60 0.15 295)" />
+        <KPI label="缓存 Token" value={U.compactCN(totals.cacheTokens)}
+          sub={`命中 ${totals.cacheHitRate.toFixed(0)}%`}
+          delta={U.deltaPct(totals.cacheTokens, compareData.totals?.cacheTokens)}
+          sparkValues={sparkBy('cacheReadTokens')} sparkColor="oklch(0.65 0.11 200)" />
+        <KPI label="推理 Token" value={U.compactCN(totals.reasoningTokens)}
+          sub="推理"
+          delta={U.deltaPct(totals.reasoningTokens, compareData.totals?.reasoningTokens)}
+          sparkValues={sparkBy('reasoningOutputTokens')} sparkColor="oklch(0.65 0.12 150)" />
+        <KPI label="官方价账单" value={U.fmtUS.format(totals.costUSD)}
+          sub="按官网单价"
+          delta={U.deltaPct(totals.costUSD, compareData.totals?.costUSD)}
+          sparkValues={sparkBy('costUSD')} sparkColor="oklch(0.72 0.14 75)" />
+      </div>
+
+      <OfficialPricingNotice meta={M.meta?.officialPricing} visibleCostUSD={totals.costUSD} />
+      <CollectionCoveragePanel
+        coverage={collectionCoverage}
+        loading={coverageLoading}
+        error={coverageError}
+        demoMode={M.meta?.demoMode}
+        onRefresh={onLoadCollectionCoverage} />
+      <ProjectCoveragePanel
+        coverage={M.meta?.projectCoverage}
+        workflow={M.meta?.reviewWorkflow}
+        autoPlan={autoAttributionPlan}
+        busy={autoAttributionBusy}
+        message={autoAttributionMessage}
+        lastRunId={lastAutoRunId}
+        onApply={applyHighConfidenceAutoAttribution}
+        onUndo={undoLastAutoAttribution} />
+      <ModelUsageOverview
+        rows={modelUsageRows}
+        selectedModels={filters.models}
+        onToggleModel={toggleModelFilter}
+        onClearModels={clearModelFilter} />
+      <AutoAttributionPanel
+        plan={autoAttributionPlan}
+        coverage={M.meta?.projectCoverage} />
+      <AttributionOverview
+        rows={attributionStatusSummary}
+        totalTokens={sessionTotals.totalTokens}
+        totalSessions={sessionTotals.sessionCount}
+        onQuickAttribute={() => {
+          setQuickAttributionError(null);
+          setQuickAttributionOpen(true);
+        }} />
+      <RoiReview
+        riskRows={riskDistribution}
+        projectRows={projectRoiRows}
+        weeklyReview={weeklyReview}
+        totalTokens={sessionTotals.totalTokens} />
+
+      <FirstRunPanel
+        state={firstRunState}
+        onOpenImportBudget={() => setImportBudgetOpen(true)} />
+      <SourceHealthPanel
+        rows={M.meta?.sourceHealth || []}
+        onOpenImportBudget={() => setImportBudgetOpen(true)} />
+
+      <div className="grid">
         <div className="col-12">
           <TablePanel
             daily={filtered}
@@ -872,6 +927,12 @@ function Dashboard({
             onExportAnnotations={onExportAnnotations}
             onImportAnnotations={onImportAnnotations}
             onDrill={setDrill} />
+        </div>
+      </div>
+
+      <div className="grid">
+        <div className="col-12">
+          <Heatmap rows={filtered} dates={dates} hourlyPattern={M.HOURLY} />
         </div>
       </div>
 
@@ -905,6 +966,114 @@ function Dashboard({
       )}
     </div>
   );
+}
+
+function DataSourceStatusPanel({
+  runtime,
+  coverage,
+  coverageLoading,
+  coverageError,
+  collecting,
+  collectStatus,
+  onRunCoverage,
+  onStartCollect,
+  onRefresh
+}) {
+  const dataMode = runtime?.dataMode || {};
+  const counts = runtime?.counts || {};
+  const coverageGate = runtime?.coverageGate || {};
+  const modeClass = dataMode.severity || dataMode.id || 'unknown';
+  const canCollect = !runtime?.demoMode && !collecting;
+  const hasCoverage = Boolean(coverage);
+  const coverageSummary = hasCoverage
+    ? coverageTrustSentence(coverage)
+    : coverageGate.status === 'passed'
+      ? `最近 coverage gate 通过：${coverageRangeText(coverageGate.firstTimestamp, coverageGate.lastTimestamp)}`
+      : '还没有在当前浏览器运行只读 coverage gate。';
+
+  return (
+    <section className={`data-source-status-panel mode-${modeClass}`} aria-label="数据来源状态">
+      <div className="data-source-status-main">
+        <div>
+          <div className="eyebrow">数据来源状态</div>
+          <h2>{dataMode.label || 'Unknown data mode'}</h2>
+          <p>{dataMode.message || '正在读取本地 SQLite 状态。'}</p>
+        </div>
+        <div className="data-source-version">
+          <span>Token Studio</span>
+          <strong>v{runtime?.packageVersion || 'unknown'}</strong>
+        </div>
+      </div>
+
+      <div className="data-source-status-grid">
+        <DataSourceMetric label="Daily rows" value={U.compactCN(counts.dailyRows || 0)} />
+        <DataSourceMetric label="Sessions" value={U.compactCN(counts.sessionRows || 0)} />
+        <DataSourceMetric label="Token events" value={U.compactCN(counts.tokenEventRows || 0)} />
+        <DataSourceMetric label="SQLite" value={runtime?.db?.kind || 'unknown'} detail={runtime?.db?.fileName || ''} />
+      </div>
+
+      <div className="real-collect-guide">
+        <div className="real-collect-step">
+          <span>1</span>
+          <div>
+            <strong>先做只读 coverage</strong>
+            <p>{coverageSummary}</p>
+            {coverageError && <em>{coverageError}</em>}
+          </div>
+        </div>
+        <div className="real-collect-step">
+          <span>2</span>
+          <div>
+            <strong>确认写入 Claude / Codex</strong>
+            <p>通过 gate 后才写真实 SQLite；写入前会备份，不把 Cursor detected-only 当成功。</p>
+            {collectStatus?.message && <em>{collectStatus.message}</em>}
+          </div>
+        </div>
+        <div className="real-collect-step">
+          <span>3</span>
+          <div>
+            <strong>刷新看板确认 token_events</strong>
+            <p>只有 token_events 大于 0，才说明浏览器看板进入 event 级真实数据状态。</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="data-source-actions">
+        <button className="btn btn-primary" onClick={onRunCoverage} disabled={coverageLoading || collecting || runtime?.demoMode}>
+          {coverageLoading ? '只读检查中' : '运行只读 coverage'}
+        </button>
+        <button className="btn" onClick={onStartCollect} disabled={!canCollect}>
+          {collecting ? '采集中' : '确认写入真实 SQLite'}
+        </button>
+        <button className="btn" onClick={onRefresh}>刷新看板</button>
+      </div>
+      {runtime?.demoMode && (
+        <div className="data-source-footnote">Demo 模式不会扫描真实 `.claude` / `.codex` 日志。要看真实数据，请用 `token-studio start` 打开真实 SQLite。</div>
+      )}
+    </section>
+  );
+}
+
+function DataSourceMetric({ label, value, detail }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {detail && <small>{detail}</small>}
+    </div>
+  );
+}
+
+function coverageTrustSentence(coverage) {
+  const trusted = (coverage.sources || []).filter(source => source.coverageRisk === 'trusted-event-level');
+  const cursor = (coverage.sources || []).find(source => source.id === 'cursor');
+  const cursorText = cursor?.coverageRisk === 'detected-no-token-fields'
+    ? '；Cursor 检测到但无可靠 token 字段'
+    : '';
+  if (trusted.length) {
+    return `${trusted.map(source => source.label || source.id).join(' / ')} 已通过 event/session/daily 校验${cursorText}。`;
+  }
+  return `还没有可信 event 级来源${cursorText}。`;
 }
 
 function FirstRunPanel({ state, onOpenImportBudget }) {
@@ -943,7 +1112,7 @@ function FirstRunPanel({ state, onOpenImportBudget }) {
       <div className="first-run-steps">
         {state.steps.map(step => (
           <article key={step.id} className={`first-run-step ${step.status}`}>
-            <span>{step.status === 'done' ? 'Done' : 'Todo'}</span>
+            <span>{step.status === 'done' ? '已完成' : '待处理'}</span>
             <strong>{step.title}</strong>
             <p>{step.detail}</p>
           </article>
@@ -978,43 +1147,47 @@ function SourceHealthPanel({ rows = [], onOpenImportBudget }) {
   ].slice(0, 10);
 
   return (
-    <section className="source-health-panel" aria-label="Source Health Center">
+    <section className="source-health-panel" aria-label="工具来源覆盖">
       <div className="source-health-head">
         <div>
-          <div className="eyebrow">Source Health Center</div>
-          <h2>覆盖面靠 ccusage bridge 拉齐，事实用量只认可靠 token 字段</h2>
-          <p>显示 native stable、experimental、detected-only 和 import-bridge 的状态；这里不读取正文，也不暴露本机完整路径。</p>
+          <div className="eyebrow">工具来源覆盖</div>
+          <h2>这里只说明工具支持状态，不代表你的项目覆盖率</h2>
+          <p>项目覆盖看上面的“项目覆盖与归因进度”。这里仅用于安装、导入和排障：说明哪些工具可原生采集、可导入或仅检测；不读取正文，也不暴露本机完整路径。</p>
         </div>
         <div className="source-health-actions">
           <button className="btn btn-primary" onClick={onOpenImportBudget}>生成 ccusage 命令</button>
-          <a className="btn" href="/live">看实时限额</a>
+          <a className="btn" href="/live">查看实时限额</a>
         </div>
       </div>
       <div className="source-health-stats">
-        <SourceHealthStat label="Stable" value={groups.stable} />
-        <SourceHealthStat label="Experimental" value={groups.experimental} />
-        <SourceHealthStat label="Import bridge" value={groups.importOnly} />
-        <SourceHealthStat label="Detected-only" value={groups.detectedOnly} />
+        <SourceHealthStat label="原生稳定" value={groups.stable} />
+        <SourceHealthStat label="实验支持" value={groups.experimental} />
+        <SourceHealthStat label="导入桥" value={groups.importOnly} />
+        <SourceHealthStat label="仅检测" value={groups.detectedOnly} />
       </div>
       <div className="source-health-grid">
         {visibleRows.map(row => (
           <article key={row.id} className={`source-health-card status-${row.supportStatus} health-${row.health}`}>
             <div className="source-health-card-top">
-              <strong>{row.label}</strong>
-              <span>{row.coverageTier}</span>
+              <strong>{sourceHealthLabel(row)}</strong>
+              <span>{sourceTierLabel(row)}</span>
             </div>
             <div className="source-health-card-meta">
-              <span>{row.detected ? 'detected' : 'not detected'}</span>
-              <span>{row.readsConversationContent ? 'reads content' : 'no transcript'}</span>
-              <span>{row.tokenReliability}</span>
+              <span>{row.detected ? '已检测到' : '未检测到'}</span>
+              <span>{row.readsConversationContent ? '可能读取内容' : '不读取正文'}</span>
+              <span>{tokenReliabilityLabel(row.tokenReliability)}</span>
             </div>
             <div className="source-health-card-counts">
               <b>{U.compactCN(row.sessions || 0)}</b>
-              <span>sessions</span>
+              <span>会话数</span>
               <b>{U.compactCN(row.tokenEvents || 0)}</b>
-              <span>events</span>
+              <span>事件数</span>
               <b>{U.compactCN(row.totalTokens || 0)}</b>
-              <span>tokens</span>
+              <span>Token</span>
+            </div>
+            <div className="source-health-run">
+              <span>{sourceHealthStatusLabel(row)}</span>
+              {row.lastRunMessage && <small>{row.lastRunMessage}</small>}
             </div>
             <code>{row.commandHint}</code>
           </article>
@@ -1031,6 +1204,40 @@ function SourceHealthStat({ label, value }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function sourceHealthLabel(row) {
+  if (row.id === 'ccusage') return 'ccusage 导入桥';
+  return row.label;
+}
+
+function sourceTierLabel(row) {
+  if (row.supportStatus === 'stable') return '原生稳定';
+  if (row.supportStatus === 'experimental') return '实验支持';
+  if (row.supportStatus === 'import-only') return '导入桥';
+  return '仅检测';
+}
+
+function tokenReliabilityLabel(value) {
+  const labels = {
+    'native-token-fields': '原生 token 字段',
+    'explicit-token-fields-only': '只认显式 token 字段',
+    'external-json-token-fields': '外部 JSON token 字段',
+    'unknown-no-usage-import': '未知，不导入用量'
+  };
+  return labels[value] || '未知 token 口径';
+}
+
+function sourceHealthStatusLabel(row) {
+  const labels = {
+    'has-data': '已有真实用量',
+    'last-run-error': '上次采集失败',
+    'detected-no-data': '检测到工具，但还没有采到 token',
+    'import-ready': '可通过导入桥接入',
+    seen: '曾经看到用量',
+    'not-detected': '未检测到本机数据'
+  };
+  return labels[row.health] || '待确认';
 }
 
 function CollectConfirmModal({ busy, onClose, onConfirm }) {
@@ -1051,8 +1258,9 @@ function CollectConfirmModal({ busy, onClose, onConfirm }) {
         </div>
         <div className="annotation-modal-body">
           <div className="notice-list">
-            <div>本次采集会扫描本机 `.claude` / `.codex` 等已启用采集器的本地日志目录。</div>
+            <div>本次写入只使用 P0 可信来源：本机 Claude Code 和 Codex CLI 的结构化 token 日志。</div>
             <div>采集器只统计 token、模型、时间、项目路径等用量字段，不读取或展示对话正文。</div>
+            <div>Cursor 当前只有明确 token 字段才会进入 coverage；不会用文本长度估算，也不会把 detected-only 写入 usage。</div>
             <div>服务端会在写入前自动复制当前 SQLite 到 `data/backups/`。</div>
           </div>
         </div>
@@ -1478,6 +1686,120 @@ function OfficialPricingNotice({ meta, visibleCostUSD }) {
   );
 }
 
+function CollectionCoveragePanel({ coverage, loading, error, demoMode, onRefresh }) {
+  const sources = coverage?.sources || [];
+  const totals = coverage?.totals || {};
+  const notChecked = !loading && !coverage && !error;
+  const rangeText = coverageRangeText(totals.firstTimestamp, totals.lastTimestamp);
+  const trustedSources = sources.filter(source => source.coverageRisk === 'trusted-event-level').length;
+  const blockedSources = sources.filter(source => source.fatalCoverageError || String(source.coverageRisk || '').startsWith('blocking')).length;
+
+  return (
+    <section className={`collection-coverage-panel ${demoMode ? 'demo' : ''}`} aria-label="真实采集可信度">
+      <div className="collection-coverage-head">
+        <div>
+          <div className="eyebrow">真实采集可信度</div>
+          <h2>{demoMode ? '当前是 Demo 数据，不代表真实采集成功' : '先确认历史 token 是否真的采到了'}</h2>
+          <p>这里回答“从哪天到哪天、多少文件、多少可解析记录、多少真实 session/event、哪里没覆盖”。工具来源覆盖在下面，只说明支持状态。</p>
+        </div>
+        <div className="collection-coverage-actions">
+          <button className="btn" onClick={onRefresh} disabled={loading}>
+            {loading ? '检查中' : coverage ? '重新检查' : '运行只读检查'}
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="collection-coverage-error">{error}</div>}
+
+      <div className="collection-coverage-stats">
+        <CoverageStat label="可信来源" value={`${trustedSources}/${sources.length || 0}`} detail="event/session/daily 可校验" />
+        <CoverageStat label="历史范围" value={rangeText} detail="来自 token event 时间" />
+        <CoverageStat label="可解析记录" value={U.compactCN(totals.usableTokenRecords || 0)} detail={`${U.compactCN(totals.candidateFiles || 0)} 个候选文件`} />
+        <CoverageStat label="Token Events" value={U.compactCN(totals.tokenEvents || 0)} detail={`${U.compactCN(totals.eventTotalTokens || 0)} token`} />
+        <CoverageStat label="阻塞风险" value={blockedSources ? `${blockedSources} 个` : '无'} detail="apply 前会被拦截" />
+      </div>
+
+      <div className="collection-coverage-grid">
+        {(loading && !coverage) ? (
+          <article className="collection-coverage-card pending">
+            <strong>正在做只读 dry-run</strong>
+            <p>不会写 SQLite，不读取正文；只统计结构化 token 字段。</p>
+          </article>
+        ) : notChecked ? (
+          <article className="collection-coverage-card pending">
+            <strong>尚未检查本机历史覆盖</strong>
+            <p>点击“运行只读检查”后才会扫描本机结构化 token 元数据；不会写 SQLite，不读取正文。</p>
+          </article>
+        ) : sources.map(source => (
+          <article key={source.id} className={`collection-coverage-card risk-${coverageRiskClass(source.coverageRisk)}`}>
+            <div className="collection-coverage-card-top">
+              <strong>{source.label || source.id}</strong>
+              <span>{coverageRiskLabel(source.coverageRisk)}</span>
+            </div>
+            <p>{coverageStatusText(source)}</p>
+            <div className="collection-coverage-counts">
+              <span><b>{U.compactCN(source.candidateFiles || 0)}</b>候选文件</span>
+              <span><b>{U.compactCN(source.usableTokenRecords || 0)}</b>可解析记录</span>
+              <span><b>{U.compactCN(source.sessionRows || 0)}</b>session</span>
+              <span><b>{U.compactCN(source.tokenEvents || 0)}</b>event</span>
+            </div>
+            <div className="collection-coverage-range">
+              {coverageRangeText(source.firstTimestamp, source.lastTimestamp)}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CoverageStat({ label, value, detail }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </div>
+  );
+}
+
+function coverageRiskLabel(value) {
+  const labels = {
+    'trusted-event-level': '可信 event 级',
+    'detected-no-token-fields': '检测到但无 token',
+    'blocking-no-events': '阻塞：无事件',
+    'blocking-reconciliation-mismatch': '阻塞：总量不一致',
+    'not-detected': '未检测到',
+    'aggregate-only': '仅聚合',
+    'collector-error': '采集器错误',
+    'demo-data': 'Demo 合成数据',
+    empty: '无可用数据'
+  };
+  return labels[value] || '待确认';
+}
+
+function coverageRiskClass(value) {
+  if (value === 'trusted-event-level') return 'trusted';
+  if (value === 'demo-data') return 'demo';
+  if (value === 'detected-no-token-fields' || value === 'aggregate-only') return 'warn';
+  if (String(value || '').startsWith('blocking') || value === 'collector-error') return 'bad';
+  return 'neutral';
+}
+
+function coverageStatusText(source) {
+  if (source.coverageRisk === 'detected-no-token-fields') {
+    return '检测到本机工具数据，但当前没有可靠 tokenCount 字段；不会估算，也不会写 usage。';
+  }
+  return source.coverageStatus || '暂无采集可信度说明';
+}
+
+function coverageRangeText(first, last) {
+  if (!first && !last) return '无历史范围';
+  const f = first ? String(first).slice(0, 10) : '?';
+  const l = last ? String(last).slice(0, 10) : '?';
+  return `${f} ~ ${l}`;
+}
+
 function ModelUsageOverview({ rows, selectedModels, onToggleModel, onClearModels }) {
   const selectedCount = selectedModels?.size || 0;
   const visibleRows = rows;
@@ -1525,25 +1847,89 @@ function ModelUsageOverview({ rows, selectedModels, onToggleModel, onClearModels
   );
 }
 
-function AutoAttributionPanel({ plan, busy, message, lastRunId, onApply, onUndo }) {
-  if (!plan) return null;
-  const reduction = Math.max(0, Math.min(1, plan.estimatedReductionShare || 0));
+function ProjectCoveragePanel({ coverage, workflow, autoPlan, busy, message, lastRunId, onApply, onUndo }) {
+  if (!coverage) return null;
+  const recognizedPct = (coverage.recognizedShare || 0) * 100;
+  const completePct = (coverage.attributionCompletionShare || 0) * 100;
+  const pendingPct = (coverage.pendingTokenShare || 0) * 100;
+  const reduction = Math.max(0, Math.min(1, autoPlan?.estimatedReductionShare || 0));
   return (
-    <section className="auto-attribution-panel" aria-label="懒人自动归因">
-      <div className="auto-attribution-main">
+    <section className="project-coverage-panel" aria-label="项目覆盖与归因进度">
+      <div className="project-coverage-head">
         <div>
-          <div className="eyebrow">懒人自动归因</div>
-          <h2>先自动填高置信度，人工只处理例外</h2>
-          <p>
-            只使用项目路径、来源、模型、token 结构、时间、别名规则和产出链接；
-            不读取对话正文，不调用 LLM。
-          </p>
+          <div className="eyebrow">项目覆盖与归因进度</div>
+          <h2>先把真实项目认出来，再让系统自动补大部分归因</h2>
+          <p>这里统计的是你的真实项目和 session 归因，不是工具来源数量。自动归因只用结构化元数据，不读正文、不调用 LLM。</p>
         </div>
-        <div className="auto-attribution-actions">
-          <button className="btn btn-primary" onClick={onApply} disabled={busy || plan.highConfidenceCount === 0}>
-            {busy ? '处理中' : `一键自动填 ${plan.highConfidenceCount} 条`}
+        <div className="project-coverage-actions">
+          <button className="btn btn-primary" onClick={onApply} disabled={busy || !autoPlan || autoPlan.highConfidenceCount === 0}>
+            {busy ? '归因中' : `一键懒人归因 ${autoPlan?.highConfidenceCount || 0} 条`}
           </button>
           <button className="btn" onClick={onUndo} disabled={busy || !lastRunId}>撤销上次自动归因</button>
+        </div>
+      </div>
+      <div className="project-coverage-grid">
+        <CoverageMetric label="识别到的项目" value={coverage.projectCount} note={`${coverage.recognizedSessionCount}/${coverage.sessionCount} 个 session · ${recognizedPct.toFixed(0)}%`} tone="project" />
+        <CoverageMetric label="证据完整归因" value={`${completePct.toFixed(0)}%`} note={`${coverage.completeSessionCount} 个已补齐目的、阶段、价值`} tone="complete" />
+        <CoverageMetric label="待确认成本" value={U.fmtUS4.format(coverage.pendingCostUSD || 0)} note={`${U.compactCN(coverage.pendingTokens || 0)} tokens · ${pendingPct.toFixed(0)}%`} tone="pending" />
+        <CoverageMetric label="自动 / 人工" value={`${coverage.autoHighSessionCount}/${coverage.manualSessionCount}`} note={`自动高置信 / 人工确认，另有 ${coverage.autoLowSessionCount} 条待确认`} tone="auto" />
+      </div>
+      <div className="review-workflow-strip">
+        <div>
+          <span>本周高成本项目</span>
+          <strong>{workflow?.highCostProject?.project || '暂无'}</strong>
+        </div>
+        <div>
+          <span>已完成/发布产出</span>
+          <strong>{workflow?.completedOrPublishedCount || 0}</strong>
+        </div>
+        <div>
+          <span>已发布产出链接</span>
+          <strong>{workflow?.publishedOutputCount || 0}</strong>
+        </div>
+        <div>
+          <span>待执行建议</span>
+          <strong>{workflow?.openAdvisorActionCount || 0}</strong>
+        </div>
+        <div>
+          <span>预计减少未归因</span>
+          <strong>{(reduction * 100).toFixed(0)}%</strong>
+        </div>
+      </div>
+      {message && <div className={`auto-attribution-message auto-attribution-message-${message.type}`}>{message.text}</div>}
+    </section>
+  );
+}
+
+function CoverageMetric({ label, value, note, tone }) {
+  return (
+    <article className={`coverage-metric coverage-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{note}</p>
+    </article>
+  );
+}
+
+function AutoAttributionPanel({ plan, coverage }) {
+  if (!plan) return null;
+  const draftRows = plan.suggestions
+    .filter(item => !item.canApply || item.annotationConfidence < plan.threshold)
+    .slice(0, 4);
+  const hasDrafts = draftRows.length > 0;
+  return (
+    <section className="auto-attribution-panel" aria-label="自动归因待确认草稿">
+      <div className="auto-attribution-main">
+        <div>
+          <div className="eyebrow">待确认草稿</div>
+          <h2>系统会给中低置信建议，但不会把它们伪装成事实</h2>
+          <p>
+            高置信已经可以一键写入；低置信只展示建议值、置信度和原因，后续在“待确认队列”里人工抽查高成本例外。
+          </p>
+        </div>
+        <div className="auto-attribution-summary">
+          <strong>{plan.lowConfidenceCount}</strong>
+          <span>条待确认建议</span>
         </div>
       </div>
       <div className="auto-attribution-stats">
@@ -1556,15 +1942,27 @@ function AutoAttributionPanel({ plan, busy, message, lastRunId, onApply, onUndo 
           <strong>{plan.lowConfidenceCount}</strong>
         </div>
         <div>
-          <span>预计减少未归因</span>
-          <strong>{(reduction * 100).toFixed(0)}%</strong>
+          <span>当前待确认成本</span>
+          <strong>{U.fmtUS4.format(coverage?.pendingCostUSD || 0)}</strong>
         </div>
         <div>
           <span>规则版本</span>
           <strong>{plan.version}</strong>
         </div>
       </div>
-      {message && <div className={`auto-attribution-message auto-attribution-message-${message.type}`}>{message.text}</div>}
+      {hasDrafts && (
+        <div className="auto-draft-list">
+          {draftRows.map(item => (
+            <article key={`${item.device}:${item.source}:${item.sessionId}`} className="auto-draft-row">
+              <div>
+                <strong>{item.values.projectAlias || item.projectPath || item.sessionId}</strong>
+                <span>{item.source} · {U.compactCN(item.totalTokens || 0)} tokens · 置信度 {item.annotationConfidence}%</span>
+              </div>
+              <p title={item.annotationReason}>{item.annotationReason || '结构化证据不足，仅作为待确认草稿。'}</p>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

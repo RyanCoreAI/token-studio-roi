@@ -175,7 +175,7 @@ export async function auditExperimentalCollectors() {
     const roots = item.roots().filter(Boolean);
     const existingRoots = roots.filter(path => existsSync(path));
     const summary = existingRoots.length
-      ? await auditStructuredUsage({ roots: existingRoots })
+      ? await auditCollector(item, existingRoots)
       : emptyAuditSummary();
     collectors.push({
       id: item.id,
@@ -196,6 +196,31 @@ export async function auditExperimentalCollectors() {
     collectors,
     totals: collectors.reduce((acc, item) => addAuditSummary(acc, item.summary), emptyAuditSummary())
   };
+}
+
+async function auditCollector(item, roots) {
+  if (item.module) {
+    try {
+      const mod = await import(item.module);
+      if (typeof mod.audit === 'function') {
+        return normalizeAuditSummary(await mod.audit());
+      }
+    } catch {
+      const summary = emptyAuditSummary();
+      summary.parseErrors = 1;
+      return summary;
+    }
+  }
+  return auditStructuredUsage({ roots });
+}
+
+function normalizeAuditSummary(value = {}) {
+  const summary = emptyAuditSummary();
+  for (const key of Object.keys(summary)) {
+    const number = Number(value[key] || 0);
+    summary[key] = Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
+  }
+  return summary;
 }
 
 export function enabledCollectorIds({ includeExperimental = false, values = null } = {}) {

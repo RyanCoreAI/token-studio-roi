@@ -18,6 +18,7 @@ test('source health API returns safe coverage metadata', async () => {
       ...process.env,
       PORT: String(port),
       DB_PATH: dbPath,
+      TOKEN_STUDIO_DEMO_MODE: '1',
       SCHEDULED_COLLECT_ENABLED: 'false'
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -40,6 +41,121 @@ test('source health API returns safe coverage metadata', async () => {
 
     const data = await getJson(port, '/api/data');
     assert.ok(data.meta.sourceHealth.some(row => row.id === 'codex'));
+    assert.equal(data.meta.projectCoverage.sessionCount, 1);
+    assert.equal(data.meta.projectCoverage.projectCount, 1);
+    assert.equal(data.meta.projectCoverage.pendingSessionCount, 1);
+    assert.equal(data.meta.reviewWorkflow.pendingSessionCount, 1);
+    assert.equal(data.meta.reviewWorkflow.openAdvisorActionCount, 0);
+
+    const coverage = await getJson(port, '/api/collection-coverage');
+    assert.equal(coverage.demoMode, true);
+    assert.equal(coverage.sources[0].coverageRisk, 'demo-data');
+    assert.doesNotMatch(JSON.stringify(coverage), /C:\\\\Users|prompt|response|transcript|diff/);
+
+    const collectResponse = await fetch(`http://127.0.0.1:${port}/api/collect`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}'
+    });
+    assert.equal(collectResponse.status, 400);
+    assert.match(await collectResponse.text(), /Demo Mode/);
+  } finally {
+    await stopChild(child);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('data API labels real aggregate-only databases as not event verified', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'token-studio-data-mode-aggregate-'));
+  const dbPath = join(dir, 'usage.sqlite');
+  const port = 7400 + Math.floor(Math.random() * 1000);
+  seedAggregateDb(dbPath);
+
+  const child = spawn(process.execPath, ['src/server.mjs'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      DB_PATH: dbPath,
+      SCHEDULED_COLLECT_ENABLED: 'false'
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true
+  });
+
+  try {
+    await waitForApi(port);
+    const data = await getJson(port, '/api/data');
+    assert.equal(data.meta.demoMode, false);
+    assert.equal(data.meta.dataMode.id, 'real-aggregate-only');
+    assert.equal(data.meta.runtime.counts.sessionRows, 1);
+    assert.equal(data.meta.runtime.counts.tokenEventRows, 0);
+    assert.equal(data.meta.runtime.collectionCoverageAvailable, true);
+    assert.doesNotMatch(JSON.stringify(data.meta.runtime), /C:\\\\Users|D:\\\\HighROIProjects|prompt|response|transcript|diff/);
+  } finally {
+    await stopChild(child);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('data API labels event rows without a verified run as needing coverage', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'token-studio-data-mode-event-'));
+  const dbPath = join(dir, 'usage.sqlite');
+  const port = 8400 + Math.floor(Math.random() * 1000);
+  seedEventDb(dbPath, { verifiedRun: false });
+
+  const child = spawn(process.execPath, ['src/server.mjs'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      DB_PATH: dbPath,
+      SCHEDULED_COLLECT_ENABLED: 'false'
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true
+  });
+
+  try {
+    await waitForApi(port);
+    const data = await getJson(port, '/api/data');
+    assert.equal(data.meta.demoMode, false);
+    assert.equal(data.meta.dataMode.id, 'real-event-unverified');
+    assert.equal(data.meta.runtime.counts.tokenEventRows, 1);
+    assert.equal(data.meta.runtime.db.kind, 'real sqlite');
+    assert.equal(data.meta.runtime.db.fileName, 'usage.sqlite');
+  } finally {
+    await stopChild(child);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('data API labels verified event-level databases as event verified', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'token-studio-data-mode-event-verified-'));
+  const dbPath = join(dir, 'usage.sqlite');
+  const port = 8500 + Math.floor(Math.random() * 1000);
+  seedEventDb(dbPath, { verifiedRun: true });
+
+  const child = spawn(process.execPath, ['src/server.mjs'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      DB_PATH: dbPath,
+      SCHEDULED_COLLECT_ENABLED: 'false'
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true
+  });
+
+  try {
+    await waitForApi(port);
+    const data = await getJson(port, '/api/data');
+    assert.equal(data.meta.demoMode, false);
+    assert.equal(data.meta.dataMode.id, 'real-event-verified');
+    assert.equal(data.meta.runtime.counts.tokenEventRows, 1);
+    assert.equal(data.meta.runtime.db.kind, 'real sqlite');
+    assert.equal(data.meta.runtime.db.fileName, 'usage.sqlite');
   } finally {
     await stopChild(child);
     rmSync(dir, { recursive: true, force: true });
@@ -47,6 +163,10 @@ test('source health API returns safe coverage metadata', async () => {
 });
 
 function seedDb(dbPath) {
+  seedEventDb(dbPath, { verifiedRun: true });
+}
+
+function seedEventDb(dbPath, { verifiedRun }) {
   const db = openDb(dbPath);
   try {
     upsertSession(db, {
@@ -54,6 +174,7 @@ function seedDb(dbPath) {
       source: 'Codex CLI',
       sessionId: 'codex-s1',
       lastActivity: '2026-06-17T02:00:00Z',
+      projectPath: 'D:\\HighROIProjects\\TokenStudio',
       model: 'gpt-5.3-codex',
       inputTokens: 100,
       outputTokens: 20,
@@ -73,7 +194,27 @@ function seedDb(dbPath) {
       device: 'devbox',
       source: 'import:ccusage-cli',
       status: 'ok',
+      message: verifiedRun ? 'daily=1, sessions=1, token_events=1; candidate_files=1; usable_records=1' : null,
       collectedAt: '2026-06-17T03:05:00Z'
+    });
+  } finally {
+    db.close();
+  }
+}
+
+function seedAggregateDb(dbPath) {
+  const db = openDb(dbPath);
+  try {
+    upsertSession(db, {
+      device: 'devbox',
+      source: 'Codex CLI',
+      sessionId: 'codex-aggregate-only',
+      lastActivity: '2026-06-17T02:00:00Z',
+      projectPath: 'TokenStudio',
+      model: 'gpt-5.3-codex',
+      inputTokens: 100,
+      outputTokens: 20,
+      totalTokens: 120
     });
   } finally {
     db.close();

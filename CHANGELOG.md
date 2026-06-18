@@ -1,5 +1,49 @@
 # Changelog
 
+## 4.8.6
+
+- Added `npm run smoke:npx` as a release-blocking tarball install smoke for the real npm/npx user path.
+- Added CI release gate coverage for tests, build, privacy checks, tarball smoke, pack dry-run, and diff checks.
+- Added table row key regression tests so missing session identity and repeated synthetic rows cannot reintroduce React duplicate-key warnings.
+- Added a browser console smoke path for Dashboard runtime regressions such as `ReferenceError`, duplicate-key warnings, and API proxy connection failures.
+- Added post-publish smoke scaffolding for validating `npx token-studio@<version>` after npm publish.
+
+## 4.8.5
+
+- Fixed the Dashboard crash caused by `collectionCoverage` and related coverage handlers not being passed from `App` into `Dashboard`.
+- Changed the public default CLI entrypoint: `token-studio` now runs coverage, auto-applies trusted Claude/Codex event-level usage, then starts the browser UI.
+- Added `--no-collect` for starting the real SQLite UI without scanning and `--dry-run-only` for coverage-only startup.
+- Kept `demo` as explicit synthetic data mode and kept Cursor conservative as detected/no-token-fields unless explicit token fields exist.
+- Updated README launch wording so `npx token-studio` is the primary real-data path.
+
+## 4.8.4
+
+- Added a Dashboard “数据来源状态” card so users can immediately distinguish Demo Mode, empty DB, real aggregate-only DB, and event-level real DB.
+- Added `/api/data` runtime metadata with package version, sanitized SQLite kind/file name, daily/session/token event counts, latest collection run, and data mode.
+- Tightened `Real DB - event verified`: event rows without a passed coverage gate or verifiable collect run now show as needing coverage instead of being treated as trusted.
+- Added a browser real-collection guide: run read-only coverage first, then explicitly confirm Claude/Codex SQLite writes, then refresh and verify token events.
+- Updated server-triggered collection to use explicit `--sources claude,codex --json` so browser collection does not treat Cursor detected-only data as successful usage.
+- Kept real-mode coverage checks user-triggered from the browser; Demo mode remains synthetic and never scans local AI logs.
+- Updated npm/readme launch wording to separate `demo`, `start`, `coverage`, `collect --dry-run`, and `collect --apply`.
+
+## 4.8.3
+
+- Added `token-studio coverage --sources=claude,codex,cursor --json` as a read-only historical coverage gate before publish/readme claims.
+- Upgraded Claude Code and Codex CLI native collectors to emit real `token_events` and true local session aggregates instead of aggregate-only workspace/model rows.
+- Added reconciliation checks for `candidateRecords -> tokenEvents -> sessions -> daily`; apply mode is blocked when Claude/Codex have parseable token records but would write zero events, or when token totals differ by more than 1%.
+- Added `token-studio compare-ccusage --report=session --json --yes` to compare Token Studio dry-run token coverage with ccusage structured JSON output while ignoring third-party cost fields.
+- Added `GET /api/collection-coverage` and a Dashboard “真实采集可信度” card that separates real collection trust from tool-source support status.
+- Kept Cursor conservative: detected Cursor data without explicit token fields is reported as `detected-no-token-fields` and never estimated into usage.
+
+## 4.8.2
+
+- Hardened real local collection: `collect` now requires `--dry-run` or `--apply`, and direct `node src/collect.mjs` / `npm run collect` no longer write SQLite by default.
+- Added dry-run collection summaries with candidate file counts, parseable token records, skip reasons, and expected daily/session/event rows.
+- Added apply-mode SQLite backup plus before/after row counts, and made server-triggered collection pass explicit `--apply --yes`.
+- Added Claude Code, Codex CLI, and Cursor collection trust tests using temp fixtures and temp SQLite.
+- Made Cursor conservative: it imports only explicit token fields from local `state.vscdb` and never estimates token usage from text length.
+- Updated Source Health to show last run status/message and dry-run-first command hints.
+
 ## 4.8.1
 
 - Fixed `npx token-studio demo/start` when npm hoists `vite` beside the package instead of inside `token-studio/node_modules`.

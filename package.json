@@ -1,6 +1,6 @@
 {
   "name": "token-studio",
-  "version": "4.8.1",
+  "version": "4.8.6",
   "description": "Local AI coding ROI studio for private token, output, and model strategy review.",
   "type": "module",
   "bin": {
@@ -21,6 +21,9 @@
     "build": "vite build",
     "preview": "npm run build && node src/server.mjs",
     "serve": "node src/server.mjs",
+    "smoke:npx": "node scripts/smoke-npx.mjs",
+    "smoke:browser": "node scripts/smoke-browser-console.mjs",
+    "smoke:published": "node scripts/smoke-published.mjs",
     "test": "node --test"
   },
   "engines": {

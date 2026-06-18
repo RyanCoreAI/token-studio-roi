@@ -17,6 +17,7 @@
  *   • Dedup:           skip events where total_token_usage unchanged
  */
 
+import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { configuredPaths, configuredStrings, envPathList } from '../collector-config.mjs';
@@ -184,6 +185,7 @@ async function parseSessionFile(filePath, sessionId) {
   let currentModel     = null;
   let previousTotal    = null;   // last seen total_token_usage summary
   let workspace        = null;
+  let metaSessionId    = sessionId;
 
   const events = [];
 
@@ -199,6 +201,7 @@ async function parseSessionFile(filePath, sessionId) {
     // ── session_meta ──────────────────────────────────────────────────
     if (type === 'session_meta') {
       const payload = entry.payload || {};
+      metaSessionId = extractSessionId(payload) || metaSessionId;
       if (payload.cwd) {
         workspace = payload.cwd;
       }
@@ -278,7 +281,7 @@ async function parseSessionFile(filePath, sessionId) {
         date = localDateFromTimestamp(timestamp);
       }
 
-      events.push({ timestamp, date, model, workspace, tokens });
+      events.push({ timestamp, date, model, workspace, tokens, sessionId: metaSessionId });
     }
   }
 
@@ -295,57 +298,106 @@ function extractModel(obj) {
   return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
 
+function extractSessionId(obj) {
+  if (!obj) return null;
+  const v = obj.id || obj.session_id || obj.sessionId || null;
+  return typeof v === 'string' && v.trim() ? v.trim() : null;
+}
+
 // ---------------------------------------------------------------------------
 // Main collector
 // ---------------------------------------------------------------------------
 
 export async function collect(pricingData = null) {
   // Scan active, archived, and optional headless Codex outputs.
-  const roots = [...getSessionRoots(), ...getHeadlessRoots()];
-  const nestedPaths = await Promise.all(roots.map((root) => collectJsonlFiles(root)));
-  const filePaths = [...new Set(nestedPaths.flat())];
+  const filePaths = await collectSessionFiles();
 
   const dailyMap = new Map();   // "date::model" → aggregated
-  const wmMap    = new Map();   // "workspace::model" → aggregated
+  const sessionMap = new Map(); // true rollout session aggregate
   const seenEventKeys = new Set();
+  const tokenEvents = [];
 
   for (const filePath of filePaths) {
-    const sessionId = basename(filePath).replace(/\.jsonl$/, '');
-    const events    = await parseSessionFile(filePath, sessionId);
+    const fileSessionId = basename(filePath).replace(/\.jsonl$/, '');
+    const events = await parseSessionFile(filePath, fileSessionId);
+    if (!events.length) continue;
+    const rawSessionId = events.find(event => event.sessionId)?.sessionId || fileSessionId;
+    const primaryModel = primaryModelFor(events);
+    const sessionId = `local:${CLIENT_KEY}:${hashableSessionPart(rawSessionId)}:${primaryModel}`;
 
-    for (const { timestamp, date, model, workspace, tokens } of events) {
-      const eventKey = codexEventDedupKey({ timestamp, model, tokens });
+    for (let index = 0; index < events.length; index += 1) {
+      const { timestamp, date, model, workspace, tokens } = events[index];
+      const eventKey = codexEventDedupKey({ sessionId, timestamp, model, tokens });
       if (eventKey && seenEventKeys.has(eventKey)) continue;
       if (eventKey) seenEventKeys.add(eventKey);
 
-      const workspaceKey = workspace || sessionId;
+      const workspaceKey = workspace || rawSessionId;
 
       // Daily
       const dk = `${date}::${model}`;
       if (!dailyMap.has(dk)) dailyMap.set(dk, { date, model, ...zero(), cost: 0 });
       addInto(dailyMap.get(dk), tokens);
 
-      // Workspace+model
-      const wmk = `${workspaceKey}::${model}`;
-      if (!wmMap.has(wmk)) {
-        wmMap.set(wmk, {
-          workspace:      workspaceKey,
+      // True rollout session
+      if (!sessionMap.has(sessionId)) {
+        sessionMap.set(sessionId, {
+          sessionId,
+          workspace: workspaceKey,
           workspaceLabel: decodeWorkspace(workspaceKey),
           model,
           ...zero(),
-          cost: 0
+          cost: 0,
+          lastActivity: timestamp || null
         });
       }
-      addInto(wmMap.get(wmk), tokens);
+      const sessionAgg = sessionMap.get(sessionId);
+      addInto(sessionAgg, tokens);
+      sessionAgg.cost += calculateCost(model, tokens, pricingData);
+      if (timestamp && (!sessionAgg.lastActivity || timestamp > sessionAgg.lastActivity)) {
+        sessionAgg.lastActivity = timestamp;
+      }
+      tokenEvents.push(tokenEventFor({ sessionId, timestamp, model, tokens, index }));
     }
   }
 
-  return buildOutput(dailyMap, wmMap, pricingData);
+  return buildOutput(dailyMap, sessionMap, tokenEvents, pricingData);
 }
 
-function codexEventDedupKey({ timestamp, model, tokens }) {
+export async function audit() {
+  const filePaths = await collectSessionFiles();
+  const summary = emptyAuditSummary();
+  const sessions = new Set();
+  summary.candidateFiles = filePaths.length;
+  for (const filePath of filePaths) {
+    const sessionId = basename(filePath).replace(/\.jsonl$/, '');
+    const events = await parseSessionFile(filePath, sessionId);
+    if (events.length) {
+      summary.usableTokenRecords += events.length;
+      sessions.add(events.find(event => event.sessionId)?.sessionId || sessionId);
+      for (const event of events) {
+        summary.totalTokens += tokenTotal(event.tokens);
+        summary.firstTimestamp = earlierTimestamp(summary.firstTimestamp, event.timestamp);
+        summary.lastTimestamp = laterTimestamp(summary.lastTimestamp, event.timestamp);
+      }
+    } else {
+      summary.skippedNoTokenRecords += 1;
+    }
+  }
+  summary.sessionRows = sessions.size;
+  summary.tokenEvents = summary.usableTokenRecords;
+  return summary;
+}
+
+async function collectSessionFiles() {
+  const roots = [...getSessionRoots(), ...getHeadlessRoots()];
+  const nestedPaths = await Promise.all(roots.map((root) => collectJsonlFiles(root)));
+  return [...new Set(nestedPaths.flat())];
+}
+
+function codexEventDedupKey({ sessionId, timestamp, model, tokens }) {
   if (!timestamp) return null;
   return [
+    sessionId,
     timestamp,
     model,
     tokens.input,
@@ -368,7 +420,7 @@ function decodeWorkspace(raw) {
 // Convert to common collector JSON
 // ---------------------------------------------------------------------------
 
-function buildOutput(dailyMap, wmMap, pricingData) {
+function buildOutput(dailyMap, sessionMap, tokenEvents, pricingData) {
   const byDate = new Map();
   for (const row of dailyMap.values()) {
     if (!byDate.has(row.date)) byDate.set(row.date, []);
@@ -396,7 +448,7 @@ function buildOutput(dailyMap, wmMap, pricingData) {
       })
     }));
 
-  const entries = [...wmMap.values()].map(wm => {
+  const entries = [...sessionMap.values()].map(wm => {
     const tokens = {
       input:     wm.input,
       output:    wm.output,
@@ -408,11 +460,79 @@ function buildOutput(dailyMap, wmMap, pricingData) {
       client:         CLIENT_KEY,
       workspaceKey:   wm.workspace,
       workspaceLabel: wm.workspaceLabel,
+      sessionId:       wm.sessionId,
+      lastActivity:    wm.lastActivity,
       model:          wm.model,
       ...tokens,
-      cost: calculateCost(wm.model, tokens, pricingData),
+      cost: wm.cost,
     };
   });
 
-  return { graphJson: { contributions }, modelsJson: { entries } };
+  return { graphJson: { contributions }, modelsJson: { entries }, tokenEvents };
+}
+
+function emptyAuditSummary() {
+  return {
+    candidateFiles: 0,
+    usableTokenRecords: 0,
+    skippedNoTokenRecords: 0,
+    skippedConversationLikeRecords: 0,
+    skippedOversizedFiles: 0,
+    parseErrors: 0,
+    sessionRows: 0,
+    tokenEvents: 0,
+    totalTokens: 0,
+    firstTimestamp: null,
+    lastTimestamp: null
+  };
+}
+
+function tokenEventFor({ sessionId, timestamp, model, tokens, index }) {
+  return {
+    eventId: `codex:${stableHash({ sessionId, timestamp, model, tokens, index })}`,
+    source: CLIENT_KEY,
+    sessionId,
+    timestamp: timestamp || new Date().toISOString(),
+    model,
+    inputTokens: tokens.input,
+    outputTokens: tokens.output,
+    cacheReadTokens: tokens.cacheRead,
+    cacheCreationTokens: tokens.cacheWrite,
+    reasoningTokens: tokens.reasoning,
+    privacyLevel: 'safe'
+  };
+}
+
+function primaryModelFor(events) {
+  const byModel = new Map();
+  for (const event of events) {
+    byModel.set(event.model, (byModel.get(event.model) || 0) + tokenTotal(event.tokens));
+  }
+  return [...byModel.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
+}
+
+function tokenTotal(tokens) {
+  return tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite + tokens.reasoning;
+}
+
+function stableHash(payload) {
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, 32);
+}
+
+function hashableSessionPart(value) {
+  const text = String(value || '').trim();
+  if (!text) return 'unknown-session';
+  return text.replace(/[^a-z0-9_.-]+/gi, '-').slice(0, 96) || stableHash(text);
+}
+
+function earlierTimestamp(left, right) {
+  if (!right) return left || null;
+  if (!left) return right;
+  return new Date(right) < new Date(left) ? right : left;
+}
+
+function laterTimestamp(left, right) {
+  if (!right) return left || null;
+  if (!left) return right;
+  return new Date(right) > new Date(left) ? right : left;
 }

@@ -155,6 +155,14 @@ export function buildAutoAttributionSuggestion(session = {}, options = {}) {
       applyIfDefault(values, fieldConfidence, 'workPurpose', shape.workPurpose, shape.confidence);
       applyIfDefault(values, fieldConfidence, 'workStage', shape.workStage, shape.confidence);
       reasons.push(shape.reason);
+    } else {
+      const modelContext = inferFromModelAndActivity(session, now);
+      if (modelContext) {
+        applyIfDefault(values, fieldConfidence, 'taskType', modelContext.taskType, modelContext.confidence);
+        applyIfDefault(values, fieldConfidence, 'workPurpose', modelContext.workPurpose, modelContext.confidence);
+        applyIfDefault(values, fieldConfidence, 'workStage', modelContext.workStage, modelContext.confidence);
+        reasons.push(modelContext.reason);
+      }
     }
   }
 
@@ -320,6 +328,35 @@ function inferFromTokenShape(session) {
     };
   }
   return null;
+}
+
+function inferFromModelAndActivity(session, now) {
+  if (session.outputUrl) return null;
+  const input = Number(session.inputTokens || 0);
+  const total = Number(session.totalTokens || 0);
+  if (input < 50_000 || total < 60_000) return null;
+  const tier = modelTier(session.model || session.pricingModel, session.pricingStatus);
+  const last = parseDate(session.lastActivity);
+  const recentlyActive = last
+    ? (now.getTime() - last.getTime()) / 36e5 >= 0 && (now.getTime() - last.getTime()) / 36e5 <= 72
+    : false;
+  if (!['heavy', 'mid'].includes(tier) && !recentlyActive) return null;
+  return {
+    taskType: '技术调研',
+    workPurpose: '技术调研',
+    workStage: '探索',
+    confidence: 60,
+    reason: '高输入 session 暂无产出链接，只能结合模型层级和最近活动低置信建议为技术调研或探索，需人工确认。'
+  };
+}
+
+function modelTier(model, pricingStatus = '') {
+  const name = normalizeText(model).toLowerCase();
+  if (!name || name === '<synthetic>' || pricingStatus === 'unpriced') return 'unpriced';
+  if (name.startsWith('gpt-5.5') || name.includes('claude-opus')) return 'heavy';
+  if (name === 'gpt-5.3-codex' || name.includes('claude-sonnet')) return 'mid';
+  if (name.includes('claude-haiku') || name.includes('deepseek') || name.includes('mimo')) return 'light';
+  return 'unknown';
 }
 
 function applyIfDefault(values, fieldConfidence, field, value, confidence) {

@@ -2,19 +2,31 @@
 
 This guide gets a new user from an empty checkout to a useful ROI review in about five minutes.
 
-## 1. Start Safely With Demo Data
+## 1. Start With Real Local Coverage
 
 ```bash
-npx token-studio demo
+npx token-studio
 ```
 
-Demo mode uses synthetic data and does not scan `.claude`, `.codex`, Cursor, Copilot, or any other local AI logs.
+The default command runs read-only coverage over local Claude/Codex/Cursor metadata, writes trusted Claude/Codex event-level token rows, and opens the browser. It does not store prompts, responses, transcripts, diffs, command bodies, or full file paths. Cursor stays detected-only unless explicit token fields exist.
 
 From a cloned repository, use:
 
 ```bash
 npm install
-npm run demo
+node src/cli.mjs
+```
+
+To inspect the product without scanning local AI logs, use synthetic demo mode:
+
+```bash
+npx token-studio demo
+```
+
+To only inspect current SQLite without scanning, use:
+
+```bash
+npx token-studio --no-collect
 ```
 
 ## 2. Try The Import Flow Without Writing

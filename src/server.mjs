@@ -1,7 +1,7 @@
-import { copyFileSync, createReadStream, existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { URL } from 'node:url';
 import {
   attachOfficialPricing,
@@ -60,6 +60,7 @@ import { buildModelPolicy, formatModelPolicyMarkdown } from './model-policy.mjs'
 import { buildLiveSnapshot } from './live.mjs';
 import { applyCcusageImport, parseCcusageJsonText, planCcusageImport } from './ccusage-import.mjs';
 import { buildSourceHealth } from './source-health.mjs';
+import { buildProjectCoverage, buildReviewWorkflow } from './project-coverage.mjs';
 
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || process.env.BIND_HOST || '127.0.0.1';
@@ -67,8 +68,10 @@ const staticDir = existsSync(resolve(process.cwd(), 'dist'))
   ? resolve(process.cwd(), 'dist')
   : resolve(process.cwd(), 'public');
 const dbPath = process.env.DB_PATH || defaultDbPath;
+const packageVersion = readPackageVersion();
 const db = openDb(dbPath);
 let activeCollection = null;
+let lastCoverageGate = null;
 let collectionState = {
   status: 'idle',
   message: '尚未启动采集',
@@ -83,7 +86,9 @@ let collectionState = {
 const server = createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname.startsWith('/api/')) {
-    handleApi(req, url, res);
+    handleApi(req, url, res).catch(error => {
+      sendJson(res, { error: error.message }, 500);
+    });
     return;
   }
   serveStatic(url.pathname, res);
@@ -95,7 +100,7 @@ server.listen(port, host, () => {
   startScheduledCollect();
 });
 
-function handleApi(req, url, res) {
+async function handleApi(req, url, res) {
   if (url.pathname === '/api/summary') {
     sendJson(res, {
       totals: one(`
@@ -277,6 +282,12 @@ function handleApi(req, url, res) {
       providerFromSource(s.source)
     ));
 
+    const workItems = listWorkItems(db);
+    const budgetProfiles = listBudgetProfiles(db);
+    const advisorActions = listAdvisorActions(db);
+    const tokenEvents = listTokenEvents(db, { limit: 1000 });
+    const runtime = runtimeMetadata();
+
     sendJson(res, {
       meta: {
         taskTypes: TASK_TYPES,
@@ -290,16 +301,20 @@ function handleApi(req, url, res) {
         outputTypes: OUTPUT_TYPES,
         projectAliasMatchTypes: PROJECT_ALIAS_MATCH_TYPES,
         projectAliasRules: aliasRules,
-        demoMode: process.env.TOKEN_STUDIO_DEMO_MODE === '1',
+        demoMode: runtime.demoMode,
+        dataMode: runtime.dataMode,
+        runtime,
         officialPricing: officialPricingMetadata(daily),
-        sourceHealth: sourceHealth()
+        sourceHealth: sourceHealth(),
+        projectCoverage: buildProjectCoverage({ sessions: pricedSessions }),
+        reviewWorkflow: buildReviewWorkflow({ sessions: pricedSessions, advisorActions })
       },
       daily,
       sessions: pricedSessions,
-      workItems: listWorkItems(db),
-      budgetProfiles: listBudgetProfiles(db),
-      advisorActions: listAdvisorActions(db),
-      tokenEvents: listTokenEvents(db, { limit: 1000 }),
+      workItems,
+      budgetProfiles,
+      advisorActions,
+      tokenEvents,
       // Normalize runs: strip newlines from messages, shorten device names
       runs: rawRuns.map(r => ({
         ...r,
@@ -317,6 +332,21 @@ function handleApi(req, url, res) {
   if (url.pathname === '/api/source-health' && req.method === 'GET') {
     if (!validateLocalRead(req, res, '来源健康接口')) return;
     sendJson(res, { sources: sourceHealth() });
+    return;
+  }
+  if (url.pathname === '/api/collection-coverage' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '采集可信度接口')) return;
+    if (process.env.TOKEN_STUDIO_DEMO_MODE === '1') {
+      const coverage = demoCollectionCoverage();
+      lastCoverageGate = summarizeCoverageGate(coverage);
+      sendJson(res, coverage);
+      return;
+    }
+    const coverage = await collectionCoverageDryRun({
+      sources: url.searchParams.get('sources') || 'claude,codex,cursor'
+    });
+    lastCoverageGate = summarizeCoverageGate(coverage);
+    sendJson(res, coverage);
     return;
   }
   if (url.pathname === '/api/budget-profiles' && req.method === 'GET') {
@@ -748,6 +778,10 @@ async function handleImportCcusageJson(req, res) {
 
 function handleCollect(req, res) {
   if (!validateLocalJsonWrite(req, res, '采集接口')) return;
+  if (process.env.TOKEN_STUDIO_DEMO_MODE === '1') {
+    sendJson(res, { error: 'Demo Mode 只使用合成数据，不允许扫描本机 AI 日志。请使用 token-studio start 打开真实 SQLite 后再采集。' }, 400);
+    return;
+  }
 
   try {
     const started = startCollection({ reason: 'manual', requireBackup: true });
@@ -767,14 +801,19 @@ function startCollection({ reason = 'manual', requireBackup = false } = {}) {
   }
 
   const backup = requireBackup ? createDbBackup({ reason: reason === 'scheduled' ? 'scheduled-collect' : 'collect' }) : null;
-  const args = ['src/collect.mjs'];
+  const sources = 'claude,codex';
+  const args = ['src/collect.mjs', '--apply', '--yes', '--sources', sources, '--json'];
   const device = collectionDevice();
   if (device) args.push('--device', device);
   if (process.env.DB_PATH) args.push('--db', process.env.DB_PATH);
 
   const child = spawn(process.execPath, args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: {
+      ...process.env,
+      TOKEN_STUDIO_COLLECTORS: sources,
+      TOKEN_STUDIO_COLLECT_CONFIRMED: '1'
+    },
     windowsHide: true
   });
 
@@ -812,6 +851,10 @@ function startCollection({ reason = 'manual', requireBackup = false } = {}) {
 
   child.on('close', code => {
     activeCollection = null;
+    const parsedSummary = parseCollectSummary(stdout);
+    if (parsedSummary) {
+      lastCoverageGate = summarizeCoverageGate(parsedSummary);
+    }
     collectionState = {
       status: code === 0 ? 'ok' : 'error',
       message: code === 0 ? '采集完成' : '采集失败',
@@ -820,7 +863,8 @@ function startCollection({ reason = 'manual', requireBackup = false } = {}) {
       finishedAt: new Date().toISOString(),
       stdout: trimOutput(stdout),
       stderr: trimOutput(stderr),
-      backup
+      backup: parsedSummary?.backup || backup,
+      summary: parsedSummary ? summarizeCollectState(parsedSummary) : null
     };
   });
 
@@ -1004,11 +1048,264 @@ function sourceHealth(collectors = detectCollectors()) {
       GROUP BY source
     `),
     runs: all(`
-      SELECT source, status, collected_at AS collectedAt
+      SELECT source, status, message, collected_at AS collectedAt
       FROM collection_runs
       ORDER BY id DESC
     `)
   });
+}
+
+function runtimeMetadata() {
+  const counts = databaseCounts();
+  const demoMode = process.env.TOKEN_STUDIO_DEMO_MODE === '1';
+  const coverageGate = lastCoverageGate || defaultCoverageGate(demoMode);
+  const dataMode = dataModeFor({
+    demoMode,
+    counts,
+    coverageGate,
+    hasVerifiedEventRun: hasTrustedEventCollectionRun()
+  });
+  return {
+    packageVersion,
+    demoMode,
+    db: {
+      kind: demoMode ? 'demo sqlite' : 'real sqlite',
+      fileName: basename(dbPath || defaultDbPath)
+    },
+    counts,
+    dataMode,
+    latestCollectionRun: latestCollectionRun(),
+    collectionCoverageAvailable: true,
+    coverageGate
+  };
+}
+
+function databaseCounts() {
+  return one(`
+    SELECT
+      (SELECT COUNT(*) FROM daily_usage) AS dailyRows,
+      (SELECT COUNT(*) FROM session_usage) AS sessionRows,
+      (SELECT COUNT(*) FROM token_events) AS tokenEventRows,
+      (SELECT COUNT(*) FROM collection_runs) AS collectionRuns
+  `);
+}
+
+function latestCollectionRun() {
+  const row = one(`
+    SELECT source, status, message, collected_at AS collectedAt
+    FROM collection_runs
+    ORDER BY id DESC
+    LIMIT 1
+  `);
+  if (!row) return null;
+  return {
+    source: row.source || null,
+    status: row.status || null,
+    message: row.message ? row.message.replace(/\n/g, ' ').replace(/\s+/g, ' ').slice(0, 300) : null,
+    collectedAt: row.collectedAt || null
+  };
+}
+
+function hasTrustedEventCollectionRun() {
+  const rows = all(`
+    SELECT status, message
+    FROM collection_runs
+    ORDER BY id DESC
+    LIMIT 20
+  `);
+  return rows.some(row => {
+    if (row.status !== 'ok') return false;
+    const match = String(row.message || '').match(/token_events=(\d+)/);
+    return match && Number(match[1]) > 0;
+  });
+}
+
+function defaultCoverageGate(demoMode) {
+  return {
+    status: 'not-run',
+    checkedAt: null,
+    message: demoMode
+      ? 'Demo mode uses synthetic data.'
+      : '尚未运行本机历史 coverage gate。'
+  };
+}
+
+function dataModeFor({ demoMode, counts, coverageGate, hasVerifiedEventRun = false }) {
+  if (demoMode) {
+    return {
+      id: 'demo',
+      label: 'Demo Mode',
+      severity: 'demo',
+      message: '当前是合成演示数据，不代表真实采集成功。'
+    };
+  }
+  const dailyRows = Number(counts.dailyRows || 0);
+  const sessionRows = Number(counts.sessionRows || 0);
+  const tokenEventRows = Number(counts.tokenEventRows || 0);
+  if (dailyRows + sessionRows + tokenEventRows === 0) {
+    return {
+      id: 'empty',
+      label: 'Empty DB',
+      severity: 'empty',
+      message: '当前 SQLite 没有真实 token 数据，需要先导入或运行真实采集。'
+    };
+  }
+  const coverageVerified = coverageGate?.status === 'passed' || hasVerifiedEventRun;
+  if (tokenEventRows > 0 && coverageVerified) {
+    return {
+      id: 'real-event-verified',
+      label: 'Real DB - event verified',
+      severity: 'ok',
+      message: '当前真实 SQLite 已有 event 级 token 数据，并且最近 coverage gate 或 collect run 可验证。'
+    };
+  }
+  if (tokenEventRows > 0) {
+    return {
+      id: 'real-event-unverified',
+      label: 'Real DB - event data needs coverage',
+      severity: 'warn',
+      message: '当前真实 SQLite 有 token_events，但当前服务还没看到通过的 coverage gate；请先运行只读 coverage 再判断历史可信度。'
+    };
+  }
+  return {
+    id: 'real-aggregate-only',
+    label: 'Real DB - aggregate only',
+    severity: 'warn',
+    message: '当前真实 SQLite 只有 daily/session 聚合行，没有 token_events；历史采集还不可信。'
+  };
+}
+
+function summarizeCoverageGate(summary = {}) {
+  const sources = Array.isArray(summary.sources) ? summary.sources : [];
+  const fatal = Number(summary.totals?.fatalCoverageErrors || 0);
+  const eventSources = sources.filter(source => Number(source.tokenEvents || 0) > 0);
+  const trustedSources = sources.filter(source => source.coverageRisk === 'trusted-event-level');
+  const cursorNoToken = sources.some(source => source.id === 'cursor' && source.coverageRisk === 'detected-no-token-fields');
+  const ok = fatal === 0 && trustedSources.length > 0;
+  return {
+    status: ok ? 'passed' : 'failed',
+    checkedAt: summary.collectedAt || new Date().toISOString(),
+    mode: summary.mode || null,
+    trustedSourceCount: trustedSources.length,
+    eventSourceCount: eventSources.length,
+    fatalCoverageErrors: fatal,
+    cursorNoTokenFields: cursorNoToken,
+    totalTokenEvents: Number(summary.totals?.tokenEvents || 0),
+    firstTimestamp: summary.totals?.firstTimestamp || null,
+    lastTimestamp: summary.totals?.lastTimestamp || null,
+    message: ok
+      ? 'coverage gate passed for event-level token history.'
+      : 'coverage gate did not find trusted event-level token history.'
+  };
+}
+
+function parseCollectSummary(stdout) {
+  const text = String(stdout || '').trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(text.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function summarizeCollectState(summary) {
+  return {
+    ok: Boolean(summary.ok),
+    mode: summary.mode,
+    dailyRows: Number(summary.totals?.dailyRows || 0),
+    sessionRows: Number(summary.totals?.sessionRows || 0),
+    tokenEvents: Number(summary.totals?.tokenEvents || 0),
+    coverageRisks: (summary.sources || []).map(source => ({
+      id: source.id,
+      risk: source.coverageRisk,
+      tokenEvents: Number(source.tokenEvents || 0)
+    }))
+  };
+}
+
+function collectionCoverageDryRun({ sources = 'claude,codex,cursor' } = {}) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(process.execPath, [
+      resolve(process.cwd(), 'src', 'collect.mjs'),
+      '--dry-run',
+      '--sources',
+      sources,
+      '--json'
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        TOKEN_STUDIO_COLLECTORS: sources
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', rejectRun);
+    child.on('close', code => {
+      if (code !== 0) {
+        rejectRun(new Error((stderr || stdout || `collection coverage dry-run failed with exit code ${code}`).trim()));
+        return;
+      }
+      try {
+        resolveRun(JSON.parse(stdout));
+      } catch (error) {
+        rejectRun(new Error(`collection coverage dry-run returned invalid JSON: ${error.message}`));
+      }
+    });
+  });
+}
+
+function demoCollectionCoverage() {
+  return {
+    ok: true,
+    mode: 'demo',
+    demoMode: true,
+    collectedAt: new Date().toISOString(),
+    totals: {
+      dailyRows: 2,
+      sessionRows: 3,
+      tokenEvents: 3,
+      candidateFiles: 0,
+      usableTokenRecords: 0,
+      dailyTotalTokens: 1042000,
+      sessionTotalTokens: 1042000,
+      eventTotalTokens: 1042000,
+      firstTimestamp: null,
+      lastTimestamp: null,
+      fatalCoverageErrors: 0
+    },
+    sources: [
+      {
+        id: 'demo',
+        label: 'Demo Mode',
+        status: 'ok',
+        coverageRisk: 'demo-data',
+        coverageStatus: '合成演示数据，不代表真实采集成功。请运行 token-studio coverage 查看本机历史覆盖。',
+        dailyRows: 2,
+        sessionRows: 3,
+        tokenEvents: 3,
+        candidateFiles: 0,
+        usableTokenRecords: 0,
+        eventTotalTokens: 1042000
+      }
+    ]
+  };
 }
 
 function buildAutoAttributionContext() {
@@ -1237,4 +1534,13 @@ function contentType(filePath) {
     '.jsx': 'application/javascript; charset=utf-8'
   };
   return types[extname(filePath)] || 'application/octet-stream';
+}
+
+function readPackageVersion() {
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
+    return typeof pkg.version === 'string' ? pkg.version : 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }

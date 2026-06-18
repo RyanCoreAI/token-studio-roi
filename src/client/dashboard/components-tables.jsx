@@ -17,6 +17,7 @@ import {
   rememberAnnotationPreset,
   writeAnnotationPresets
 } from './annotation-presets.js';
+import { buildSessionKey, buildTableRowKey, createUniqueRowKeyFactory } from './table-keys.js';
 
 // Generic data table
 function DataTable({ rows, columns, initialSort, search, onSearch, onRowClick, selectedKey, getKey, height, emptyText }) {
@@ -57,6 +58,8 @@ function DataTable({ rows, columns, initialSort, search, onSearch, onRowClick, s
     );
   };
 
+  const rowKey = createUniqueRowKeyFactory(getKey);
+
   return (
     <div className="table-wrap" style={{maxHeight: height, overflow: 'auto'}}>
       <table className="dt">
@@ -86,7 +89,7 @@ function DataTable({ rows, columns, initialSort, search, onSearch, onRowClick, s
             <tr><td colSpan={columns.length} style={{textAlign:'center', padding:'30px', color:'var(--muted)'}}>{emptyText || '暂无数据'}</td></tr>
           )}
           {sorted.map((r, i) => {
-            const k = getKey ? getKey(r) : i;
+            const k = rowKey(r, i);
             return (
               <tr key={k}
                 className={selectedKey === k ? 'selected' : ''}
@@ -384,13 +387,11 @@ function TablePanel({
       r.model ? <span className="mono">{r.model}</span> : <span className="muted">—</span>
     ), width: 150 },
     { field: 'projectLabel', title: '项目', value: sessionProjectLabel, render: r => {
-      const raw = r.projectPath && r.projectPath !== 'Unknown Project'
-        ? r.projectPath
-        : (r.sessionId ? r.sessionId.split('/').slice(-1)[0] || r.sessionId : '—');
+      const raw = safeProjectPathLabel(r.projectPath) || safeProjectPathLabel(r.sessionId) || '—';
       return (
-        <span className="session-project" title={r.sessionId || ''}>
+        <span className="session-project" title={sessionProjectLabel(r)}>
           <span className="mono">{sessionProjectLabel(r)}</span>
-          {r.projectAlias && <span className="session-project-raw">{raw}</span>}
+          {r.projectAlias && <span className="session-project-raw">路径末级：{raw}</span>}
           {r.ruleProjectAlias && !r.manualProjectAlias && <span className="session-project-rule">规则建议</span>}
         </span>
       );
@@ -403,7 +404,7 @@ function TablePanel({
     { field: 'workStage', title: '阶段', render: r => <span className="tag tag-soft">{r.workStage || '未说明'}</span>, width: 90 },
     { field: 'valueLevel', title: '价值', render: r => <span className={`status-badge value-level-${valueClass(r.valueLevel)}`}>{r.valueLevel || '未评估'}</span>, width: 90 },
     { field: 'attributionQuality', title: '归因', value: r => attributionLabel(r), render: r => <AttributionSourceBadge session={r}/>, width: 110 },
-    { field: 'annotationSource', title: '归因来源', value: r => r.annotationSource || (r.autoSuggestion ? 'suggested' : ''), render: r => <span className="muted">{r.annotationSource || (r.autoSuggestion ? 'suggested' : '—')}</span>, width: 90 },
+    { field: 'annotationSource', title: '归因来源', value: r => attributionSourceText(r), render: r => <span className="muted">{attributionSourceText(r) || '—'}</span>, width: 90 },
     { field: 'annotationConfidence', title: '置信度', value: r => r.annotationConfidence ?? r.autoSuggestion?.annotationConfidence ?? '', render: r => {
       const value = r.annotationConfidence ?? r.autoSuggestion?.annotationConfidence;
       return value == null ? <span className="muted">—</span> : <span className="num-strong">{value}%</span>;
@@ -763,7 +764,7 @@ function TablePanel({
         search={search}
         height={420}
         emptyText={emptyText}
-        getKey={r => r.id ? `rule-${r.id}` : r.sessionId ? sessionKey(r) : `${r.source}-${r.model || ''}-${r.device || ''}-${r.collectedAt || ''}`}
+        getKey={(r, i) => tableRowKey(r, i, tab)}
         onRowClick={tab === 'attribution' || tab === 'aliasRules' ? undefined : r => onDrill?.({ kind: tab === 'unattributed' ? 'session' : tab.slice(0,-1), row: r })}
       />
       {batchOpen && (
@@ -1300,6 +1301,16 @@ function hasSessionDetails(session) {
   return hasAnnotation(session) || Boolean(session.outputUrl);
 }
 
+function attributionSourceText(session) {
+  if (session.annotationSource === 'auto') {
+    return Number(session.annotationConfidence || 0) >= 80 ? '自动高置信' : '自动待确认';
+  }
+  if (session.annotationSource === 'manual') return '人工确认';
+  if (session.annotationSource === 'imported') return '导入确认';
+  if (session.autoSuggestion) return '自动待确认';
+  return '';
+}
+
 function attributionLabel(session) {
   if (session.annotationSource === 'auto') return `自动 ${Number(session.annotationConfidence || 0)}%`;
   if (session.annotationSource === 'manual') return '人工确认';
@@ -1310,13 +1321,29 @@ function attributionLabel(session) {
 
 function sessionProjectLabel(session) {
   if (session.projectAlias) return session.projectAlias;
-  if (session.projectPath && session.projectPath !== 'Unknown Project') return session.projectPath;
-  if (session.sessionId) return session.sessionId.split('/').slice(-1)[0] || session.sessionId;
+  const projectPath = safeProjectPathLabel(session.projectPath);
+  if (projectPath) return projectPath;
+  const sessionPath = safeProjectPathLabel(session.sessionId);
+  if (sessionPath) return sessionPath;
   return '未归档项目';
 }
 
-function sessionKey(session) {
-  return `${session.device}::${session.source}::${session.sessionId}`;
+function safeProjectPathLabel(value) {
+  const text = String(value || '').trim();
+  if (!text || text === 'Unknown Project') return '';
+  const localPath = text.startsWith('local:')
+    ? text.slice(0, text.lastIndexOf(':')).replace(/^local:[^:]+:/, '')
+    : text;
+  const cleaned = localPath.replace(/[\\/]+$/, '');
+  return cleaned.split(/[\\/]/).filter(Boolean).at(-1) || '';
+}
+
+function tableRowKey(row, index, tab) {
+  return buildTableRowKey(row, index, tab);
+}
+
+function sessionKey(session = {}) {
+  return buildSessionKey(session);
 }
 
 function sessionIdentity(session) {

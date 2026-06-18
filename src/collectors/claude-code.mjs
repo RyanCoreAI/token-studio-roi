@@ -7,9 +7,10 @@
  * Supported platforms: macOS, Linux, Windows — no native binaries required.
  */
 
+import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { configuredBool, configuredPath, configuredPaths, envPathList } from '../collector-config.mjs';
 import { calculateCost } from '../pricing.mjs';
 import { localDateFromTimestamp, normalizeModelForGrouping } from './utils.mjs';
@@ -122,7 +123,7 @@ function decodeWorkspaceLabel(dirName) {
 
 /**
  * Read one session JSONL file and return an array of assistant-turn records.
- * Each record carries { timestamp, model, usage, costUSD }.
+ * Each record carries { timestamp, model, usage, costUSD, dedupKey }.
  *
  * Claude Code can write multiple assistant usage snapshots for the same
  * streamed response. Collapse message.id+requestId duplicates, fall back to
@@ -158,9 +159,10 @@ async function parseSessionFile(filePath) {
       model: obj.message.model || obj.model || 'unknown',
       usage: obj.message.usage,
       costUSD: typeof obj.costUSD === 'number' ? obj.costUSD : 0,
+      dedupKey: dedupKeyForAssistant(obj)
     };
 
-    const dedupKey = dedupKeyForAssistant(obj);
+    const dedupKey = record.dedupKey;
 
     if (dedupKey && dedupIndex.has(dedupKey)) {
       const existing = records[dedupIndex.get(dedupKey)];
@@ -249,8 +251,9 @@ function addInto(target, tokens) {
 export async function collect(pricingData = null) {
   // dailyKey ("YYYY-MM-DD::model") -> aggregated token counts
   const dailyMap = new Map();
-  // workspaceModelKey ("workspaceDir::model") -> aggregated token counts
-  const wmMap = new Map();
+  // sessionId -> true session-file aggregate
+  const sessionMap = new Map();
+  const tokenEvents = [];
 
   for (const root of await getScanRoots()) {
     const filePaths = await collectJsonlFiles(root.path);
@@ -258,10 +261,24 @@ export async function collect(pricingData = null) {
       const workspaceKey = workspaceKeyFromPath(root, filePath);
       const workspaceLabel = decodeWorkspaceLabel(workspaceKey);
       const records = await parseSessionFile(filePath);
+      if (!records.length) continue;
+      const sessionFileId = basename(filePath).replace(/\.jsonl$/i, '');
+      const primaryModel = primaryModelFor(records);
+      const sessionId = `local:${CLIENT_KEY}:${hashableSessionPart(sessionFileId)}:${primaryModel}`;
 
-      for (const record of records) {
+      for (let index = 0; index < records.length; index += 1) {
+        const record = records[index];
         const tokens = extractTokens(record.usage);
-        aggregateRecord({ ...record, tokens, workspaceKey, workspaceLabel }, dailyMap, wmMap, pricingData);
+        const normalized = {
+          ...record,
+          tokens,
+          sessionId,
+          workspaceKey,
+          workspaceLabel,
+          eventIndex: index
+        };
+        aggregateRecord(normalized, dailyMap, sessionMap, pricingData);
+        tokenEvents.push(tokenEventFor(normalized));
       }
     }
   }
@@ -296,12 +313,14 @@ export async function collect(pricingData = null) {
   const graphJson = { contributions };
 
   // -----------------------------------------------------------------------
-  // Convert to common workspace/model JSON
+  // Convert to true session JSON
   // -----------------------------------------------------------------------
-  const entries = [...wmMap.values()].map((wm) => ({
+  const entries = [...sessionMap.values()].map((wm) => ({
     client: CLIENT_KEY,
     workspaceKey: wm.workspace,
     workspaceLabel: wm.workspaceLabel,
+    sessionId: wm.sessionId,
+    lastActivity: wm.lastActivity,
     model: wm.model,
     input: wm.input,
     output: wm.output,
@@ -313,7 +332,34 @@ export async function collect(pricingData = null) {
 
   const modelsJson = { entries };
 
-  return { graphJson, modelsJson };
+  return { graphJson, modelsJson, tokenEvents };
+}
+
+export async function audit() {
+  const summary = emptyAuditSummary();
+  const sessions = new Set();
+  for (const root of await getScanRoots()) {
+    const filePaths = await collectJsonlFiles(root.path);
+    summary.candidateFiles += filePaths.length;
+    for (const filePath of filePaths) {
+      const records = await parseSessionFile(filePath);
+      if (records.length) {
+        summary.usableTokenRecords += records.length;
+        sessions.add(basename(filePath).replace(/\.jsonl$/i, ''));
+        for (const record of records) {
+          const tokens = extractTokens(record.usage);
+          summary.totalTokens += tokenTotal(tokens);
+          summary.firstTimestamp = earlierTimestamp(summary.firstTimestamp, record.timestamp);
+          summary.lastTimestamp = laterTimestamp(summary.lastTimestamp, record.timestamp);
+        }
+      } else {
+        summary.skippedNoTokenRecords += 1;
+      }
+    }
+  }
+  summary.sessionRows = sessions.size;
+  summary.tokenEvents = summary.usableTokenRecords;
+  return summary;
 }
 
 function workspaceKeyFromPath(root, filePath) {
@@ -323,7 +369,7 @@ function workspaceKeyFromPath(root, filePath) {
   return `transcripts:${firstSegment || filePath}`;
 }
 
-function aggregateRecord(record, dailyMap, wmMap, pricingData) {
+function aggregateRecord(record, dailyMap, sessionMap, pricingData) {
   const date = localDateFromTimestamp(record.timestamp);
   const model = normalizeModelForGrouping(record.model);
   const tokens = record.tokens || extractTokens(record.usage);
@@ -338,18 +384,98 @@ function aggregateRecord(record, dailyMap, wmMap, pricingData) {
   addInto(dayAgg, tokens);
   dayAgg.cost += costUSD;
 
-  // --- workspace+model ---
-  const wmk = `${record.workspaceKey}::${model}`;
-  if (!wmMap.has(wmk)) {
-    wmMap.set(wmk, {
+  // --- true session file ---
+  if (!sessionMap.has(record.sessionId)) {
+    sessionMap.set(record.sessionId, {
+      sessionId: record.sessionId,
       workspace: record.workspaceKey,
       workspaceLabel: record.workspaceLabel,
       model,
       ...zeroTokens(),
-      cost: 0
+      cost: 0,
+      lastActivity: record.timestamp || null
     });
   }
-  const wmAgg = wmMap.get(wmk);
+  const wmAgg = sessionMap.get(record.sessionId);
   addInto(wmAgg, tokens);
   wmAgg.cost += costUSD;
+  if (record.timestamp && (!wmAgg.lastActivity || record.timestamp > wmAgg.lastActivity)) {
+    wmAgg.lastActivity = record.timestamp;
+  }
+}
+
+function emptyAuditSummary() {
+  return {
+    candidateFiles: 0,
+    usableTokenRecords: 0,
+    skippedNoTokenRecords: 0,
+    skippedConversationLikeRecords: 0,
+    skippedOversizedFiles: 0,
+    parseErrors: 0,
+    sessionRows: 0,
+    tokenEvents: 0,
+    totalTokens: 0,
+    firstTimestamp: null,
+    lastTimestamp: null
+  };
+}
+
+function tokenEventFor(record) {
+  const model = normalizeModelForGrouping(record.model);
+  return {
+    eventId: `claude:${stableHash({
+      sessionId: record.sessionId,
+      dedupKey: record.dedupKey,
+      eventIndex: record.eventIndex,
+      timestamp: record.timestamp,
+      model,
+      tokens: record.tokens
+    })}`,
+    source: CLIENT_KEY,
+    sessionId: record.sessionId,
+    timestamp: record.timestamp || new Date().toISOString(),
+    model,
+    inputTokens: record.tokens.input,
+    outputTokens: record.tokens.output,
+    cacheReadTokens: record.tokens.cacheRead,
+    cacheCreationTokens: record.tokens.cacheWrite,
+    reasoningTokens: record.tokens.reasoning,
+    privacyLevel: 'safe'
+  };
+}
+
+function primaryModelFor(records) {
+  const byModel = new Map();
+  for (const record of records) {
+    const model = normalizeModelForGrouping(record.model);
+    const tokens = extractTokens(record.usage);
+    byModel.set(model, (byModel.get(model) || 0) + tokenTotal(tokens));
+  }
+  return [...byModel.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
+}
+
+function tokenTotal(tokens) {
+  return tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite + tokens.reasoning;
+}
+
+function stableHash(payload) {
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, 32);
+}
+
+function hashableSessionPart(value) {
+  const text = String(value || '').trim();
+  if (!text) return 'unknown-session';
+  return text.replace(/[^a-z0-9_.-]+/gi, '-').slice(0, 96) || stableHash(text);
+}
+
+function earlierTimestamp(left, right) {
+  if (!right) return left || null;
+  if (!left) return right;
+  return new Date(right) < new Date(left) ? right : left;
+}
+
+function laterTimestamp(left, right) {
+  if (!right) return left || null;
+  if (!left) return right;
+  return new Date(right) > new Date(left) ? right : left;
 }

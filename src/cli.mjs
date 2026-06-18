@@ -19,15 +19,18 @@ import { buildEmptyStatuslineSnapshot, buildStatuslineSnapshot, formatStatusline
 import { buildModelPolicy, formatModelPolicy } from './model-policy.mjs';
 import { resolveViteBin } from './runtime-paths.mjs';
 
-const command = process.argv[2] || 'help';
-const args = parseArgs(process.argv.slice(3));
+const parsedCommand = parseCommand(process.argv.slice(2));
+const command = parsedCommand.command;
+const args = parseArgs(parsedCommand.args);
 const SOURCE_DIR = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(SOURCE_DIR, '..');
 const USER_CWD = process.cwd();
 const requireFromCli = createRequire(import.meta.url);
 
 try {
-  if (command === 'start') {
+  if (command === 'auto') {
+    await autoCommand();
+  } else if (command === 'start') {
     await startCommand({ demo: false });
   } else if (command === 'open') {
     await startCommand({ demo: false, openBrowser: true });
@@ -39,6 +42,10 @@ try {
     await statuslineCommand();
   } else if (command === 'collect') {
     await collectCommand();
+  } else if (command === 'coverage') {
+    await coverageCommand();
+  } else if (command === 'compare-ccusage') {
+    await compareCcusageCommand();
   } else if (command === 'collectors') {
     await collectorsCommand();
   } else if (command === 'import-usage') {
@@ -55,11 +62,60 @@ try {
     await privacyCheckCommand();
   } else {
     printHelp();
-    process.exit(command === 'help' || command === '--help' || command === '-h' ? 0 : 1);
+    process.exit(command === 'help' ? 0 : 1);
   }
 } catch (error) {
   console.error(error.message);
   process.exit(1);
+}
+
+async function autoCommand() {
+  const dbPath = cliDbPath();
+  const coverageSources = args.sources || args.collectors || 'claude,codex,cursor';
+  const applySources = args.applySources || args.writeSources || 'claude,codex';
+  const openBrowser = args.noOpen ? false : true;
+
+  if (args.noCollect) {
+    console.log('[token-studio] auto collect skipped (--no-collect). Starting local UI.');
+    await startCommand({ demo: false, dbPath, openBrowser });
+    return;
+  }
+
+  console.log(`[token-studio] coverage ${coverageSources} (read-only)`);
+  let coverage;
+  try {
+    coverage = await runCollectDryRun({ sources: coverageSources, dbPath });
+    printCoverageSummary(coverage);
+  } catch (error) {
+    console.error(`[token-studio] coverage failed: ${error.message}`);
+    console.error('[token-studio] SQLite was not modified. Starting local UI so the failure is visible.');
+    await startCommand({ demo: false, dbPath, openBrowser });
+    return;
+  }
+
+  if (args.dryRunOnly) {
+    console.log('[token-studio] dry-run only; SQLite was not modified. Starting local UI.');
+    await startCommand({ demo: false, dbPath, openBrowser });
+    return;
+  }
+
+  if (shouldAutoApplyCoverage(coverage, applySources)) {
+    console.log(`[token-studio] applying trusted usage from ${applySources}`);
+    const result = await runCollectApply({ sources: applySources, dbPath });
+    if (result.parsed) {
+      printApplySummary(result.parsed);
+    } else if (result.stdout.trim()) {
+      console.log(result.stdout.trim());
+    }
+    if (result.code !== 0) {
+      console.error(result.stderr.trim() || '[token-studio] collect apply failed.');
+      console.error('[token-studio] Starting local UI with the current SQLite state.');
+    }
+  } else {
+    console.log('[token-studio] no trusted Claude/Codex event-level history found; SQLite was not modified.');
+  }
+
+  await startCommand({ demo: false, dbPath, openBrowser });
 }
 
 async function demoCommand() {
@@ -97,6 +153,17 @@ async function startCommand({ demo = false, dbPath = null, route = '/', openBrow
     windowsHide: true
   });
   const uiUrl = `http://127.0.0.1:${uiPort}${route}`;
+  try {
+    await Promise.all([
+      waitForHttp(`http://127.0.0.1:${apiPort}/api/data`, { label: 'API' }),
+      waitForHttp(`http://127.0.0.1:${uiPort}/`, { label: 'UI' })
+    ]);
+  } catch (error) {
+    for (const child of [server, client]) {
+      if (!child.killed) child.kill();
+    }
+    throw error;
+  }
   console.log(`[token-studio] UI  ${uiUrl}${demo ? '  (Demo Mode)' : ''}`);
   console.log(`[token-studio] API http://127.0.0.1:${apiPort}`);
   if (openBrowser) {
@@ -107,24 +174,77 @@ async function startCommand({ demo = false, dbPath = null, route = '/', openBrow
 
 async function collectCommand() {
   const sources = args.sources || args.collectors || 'claude,codex';
-  const confirmed = args.yes || process.env.TOKEN_STUDIO_COLLECT_CONFIRMED === '1'
-    || await confirmCollect(sources);
-  if (!confirmed) {
-    throw new Error('Collection cancelled. No local AI logs were scanned.');
+  if (args.apply && args.dryRun) {
+    throw new Error('Choose either --apply or --dry-run, not both.');
   }
-  const collectArgs = ['src/collect.mjs', '--sources', sources];
+  if (!args.apply && !args.dryRun) {
+    throw new Error('collect requires --dry-run or --apply. Use --dry-run first to audit candidate files without writing SQLite.');
+  }
+  if (args.apply) {
+    const confirmed = args.yes || process.env.TOKEN_STUDIO_COLLECT_CONFIRMED === '1'
+      || await confirmCollect(sources);
+    if (!confirmed) {
+      throw new Error('Collection cancelled. No local AI logs were scanned.');
+    }
+  }
+  const collectArgs = [
+    'src/collect.mjs',
+    args.apply ? '--apply' : '--dry-run',
+    '--sources',
+    sources
+  ];
   if (args.db) collectArgs.push('--db', args.db);
+  if (args.json) collectArgs.push('--json');
+  if (args.apply && (args.yes || process.env.TOKEN_STUDIO_COLLECT_CONFIRMED === '1')) {
+    collectArgs.push('--yes');
+  }
   const child = spawn(process.execPath, collectArgs, {
     cwd: PACKAGE_ROOT,
     env: {
       ...process.env,
-      TOKEN_STUDIO_COLLECTORS: sources
+      TOKEN_STUDIO_COLLECTORS: sources,
+      ...(args.apply ? { TOKEN_STUDIO_COLLECT_CONFIRMED: '1' } : {})
     },
     stdio: 'inherit',
     windowsHide: true
   });
   const code = await childExitCode(child);
   process.exitCode = code;
+}
+
+async function coverageCommand() {
+  const sources = args.sources || args.collectors || 'claude,codex,cursor';
+  const summary = await runCollectDryRun({ sources, dbPath: args.db });
+  if (args.json) {
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+  printCoverageSummary(summary);
+  if (summary.totals?.fatalCoverageErrors > 0) process.exitCode = 2;
+}
+
+async function compareCcusageCommand() {
+  const report = String(args.report || 'session').toLowerCase();
+  const threshold = Number(args.threshold || 0.01);
+  const invocation = ccusageInvocation({ report, ccusageBin: args.ccusageBin });
+  await ensureCcusageBridgeConfirmed({ report, commandLabel: invocation.commandLabel });
+
+  const [tokenStudio, bridgeResult] = await Promise.all([
+    runCollectDryRun({ sources: args.sources || args.collectors || 'claude,codex', dbPath: args.db }),
+    runCcusageCliImportPlan({
+      report,
+      ccusageBin: args.ccusageBin,
+      device: args.device || hostname()
+    })
+  ]);
+  const ccusagePlan = bridgeResult.plan;
+  const comparison = buildCcusageComparison({ tokenStudio, ccusagePlan, report, threshold, command: invocation.commandLabel });
+  if (args.json) {
+    console.log(JSON.stringify(comparison, null, 2));
+  } else {
+    printCcusageComparison(comparison);
+  }
+  if (!comparison.ok) process.exitCode = 2;
 }
 
 async function doctorCommand() {
@@ -400,7 +520,7 @@ async function confirmCollect(sources) {
   if (!process.stdin.isTTY) return false;
   const rl = createInterface({ input, output });
   try {
-    console.log('This will scan local AI coding logs for structured token usage only.');
+    console.log('This will scan local AI coding logs for structured token usage and write SQLite.');
     console.log(`Sources: ${sources}`);
     console.log('It will not read or display conversation content, but it may access local metadata directories.');
     const answer = await rl.question('Type COLLECT to continue: ');
@@ -475,11 +595,218 @@ function waitForChildren(children) {
   });
 }
 
+async function waitForHttp(url, { label = 'service', timeoutMs = 45000, intervalMs = 250 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = '';
+  while (Date.now() < deadline) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (response.status < 500) return true;
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      clearTimeout(timer);
+      lastError = error.message;
+    }
+    await sleep(intervalMs);
+  }
+  throw new Error(`${label} did not become ready at ${url}${lastError ? ` (${lastError})` : ''}`);
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function childExitCode(child) {
   return new Promise(resolveRun => {
     child.on('exit', code => resolveRun(code ?? 0));
     child.on('error', () => resolveRun(1));
   });
+}
+
+function runCollectDryRun({ sources, dbPath } = {}) {
+  const collectArgs = [
+    resolve(SOURCE_DIR, 'collect.mjs'),
+    '--dry-run',
+    '--sources',
+    sources || 'claude,codex,cursor',
+    '--json'
+  ];
+  if (dbPath) collectArgs.push('--db', dbPath);
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(process.execPath, collectArgs, {
+      cwd: PACKAGE_ROOT,
+      env: {
+        ...process.env,
+        TOKEN_STUDIO_COLLECTORS: sources || 'claude,codex,cursor'
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', error => rejectRun(error));
+    child.on('close', code => {
+      if (code !== 0) {
+        rejectRun(new Error((stderr || stdout || `coverage dry-run failed with exit code ${code}`).trim()));
+        return;
+      }
+      try {
+        resolveRun(JSON.parse(stdout));
+      } catch (error) {
+        rejectRun(new Error(`coverage dry-run returned invalid JSON: ${error.message}`));
+      }
+    });
+  });
+}
+
+function runCollectApply({ sources, dbPath } = {}) {
+  const collectArgs = [
+    resolve(SOURCE_DIR, 'collect.mjs'),
+    '--apply',
+    '--yes',
+    '--sources',
+    sources || 'claude,codex',
+    '--json'
+  ];
+  if (dbPath) collectArgs.push('--db', dbPath);
+  return new Promise(resolveRun => {
+    const child = spawn(process.execPath, collectArgs, {
+      cwd: PACKAGE_ROOT,
+      env: {
+        ...process.env,
+        TOKEN_STUDIO_COLLECTORS: sources || 'claude,codex',
+        TOKEN_STUDIO_COLLECT_CONFIRMED: '1'
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', error => resolveRun({ code: 1, stdout, stderr: `${stderr}${error.message}`, parsed: null }));
+    child.on('close', code => {
+      let parsed = null;
+      try {
+        parsed = stdout.trim() ? JSON.parse(stdout) : null;
+      } catch {
+        parsed = null;
+      }
+      resolveRun({ code: code ?? 0, stdout, stderr, parsed });
+    });
+  });
+}
+
+function printCoverageSummary(summary) {
+  console.log(`Token Studio Coverage Gate (${summary.mode})`);
+  console.log(`sources=${summary.enabledCollectors?.join(',') || 'none'}`);
+  console.log(`range=${summary.totals?.firstTimestamp || '-'}..${summary.totals?.lastTimestamp || '-'}`);
+  console.log(`totals: files=${summary.totals?.candidateFiles || 0}, usable=${summary.totals?.usableTokenRecords || 0}, sessions=${summary.totals?.sessionRows || 0}, events=${summary.totals?.tokenEvents || 0}, tokens=${summary.totals?.eventTotalTokens || 0}`);
+  for (const source of summary.sources || []) {
+    console.log(`- ${source.id}: ${source.coverageRisk} | files=${source.candidateFiles}, usable=${source.usableTokenRecords}, sessions=${source.sessionRows}, events=${source.tokenEvents}, tokens=${source.eventTotalTokens}`);
+    if (source.firstTimestamp || source.lastTimestamp) console.log(`  range=${source.firstTimestamp || '-'}..${source.lastTimestamp || '-'}`);
+    if (source.coverageStatus) console.log(`  ${source.coverageStatus}`);
+  }
+}
+
+function buildCcusageComparison({ tokenStudio, ccusagePlan, report, threshold, command }) {
+  const tokenStudioTokens = Number(tokenStudio.totals?.eventTotalTokens || tokenStudio.totals?.sessionTotalTokens || tokenStudio.totals?.dailyTotalTokens || 0);
+  const ccusageTokens = sumUsageRows(ccusagePlan.tokenEvents || ccusagePlan.sessions || ccusagePlan.daily || []);
+  const diffPct = diffPctNumber(tokenStudioTokens, ccusageTokens);
+  const sources = [...new Set((tokenStudio.sources || []).map(source => source.id))];
+  return {
+    ok: diffPct <= threshold,
+    report,
+    threshold,
+    command,
+    tokenStudio: {
+      sources,
+      dailyRows: tokenStudio.totals?.dailyRows || 0,
+      sessionRows: tokenStudio.totals?.sessionRows || 0,
+      tokenEvents: tokenStudio.totals?.tokenEvents || 0,
+      totalTokens: tokenStudioTokens,
+      coverageRisks: (tokenStudio.sources || []).map(source => ({
+        id: source.id,
+        risk: source.coverageRisk,
+        status: source.coverageStatus
+      }))
+    },
+    ccusage: {
+      detectedShape: ccusagePlan.detectedShape,
+      dailyRows: ccusagePlan.daily.length,
+      sessionRows: ccusagePlan.sessions.length,
+      tokenEvents: ccusagePlan.tokenEvents.length,
+      totalTokens: ccusageTokens,
+      warnings: ccusagePlan.warnings
+    },
+    diff: {
+      tokenDelta: tokenStudioTokens - ccusageTokens,
+      diffPct
+    },
+    note: 'Only token structure is compared. Token Studio ignores ccusage cost fields and recomputes official-price cost separately.'
+  };
+}
+
+function printCcusageComparison(comparison) {
+  console.log(`Token Studio vs ccusage (${comparison.report})`);
+  console.log(`ok=${comparison.ok ? 'yes' : 'no'} threshold=${Math.round(comparison.threshold * 10000) / 100}%`);
+  console.log(`token-studio tokens=${comparison.tokenStudio.totalTokens} events=${comparison.tokenStudio.tokenEvents} sessions=${comparison.tokenStudio.sessionRows}`);
+  console.log(`ccusage tokens=${comparison.ccusage.totalTokens} events=${comparison.ccusage.tokenEvents} sessions=${comparison.ccusage.sessionRows}`);
+  console.log(`diff=${comparison.diff.tokenDelta} (${Math.round(comparison.diff.diffPct * 10000) / 100}%)`);
+  if (!comparison.ok) {
+    console.log('coverage gate failed: token totals differ beyond threshold');
+  }
+}
+
+function sumUsageRows(rows) {
+  return rows.reduce((sum, row) => sum
+    + positiveNumber(row.totalTokens ?? row.total_tokens)
+    + (row.totalTokens || row.total_tokens ? 0 : positiveNumber(row.inputTokens ?? row.input_tokens))
+    + (row.totalTokens || row.total_tokens ? 0 : positiveNumber(row.outputTokens ?? row.output_tokens))
+    + (row.totalTokens || row.total_tokens ? 0 : positiveNumber(row.cacheReadTokens ?? row.cache_read_tokens))
+    + (row.totalTokens || row.total_tokens ? 0 : positiveNumber(row.cacheCreationTokens ?? row.cache_creation_tokens))
+    + (row.totalTokens || row.total_tokens ? 0 : positiveNumber(row.reasoningTokens ?? row.reasoning_tokens ?? row.reasoningOutputTokens ?? row.reasoning_output_tokens)), 0);
+}
+
+function positiveNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
+}
+
+function diffPctNumber(left, right) {
+  const max = Math.max(Number(left || 0), Number(right || 0), 1);
+  return Math.abs(Number(left || 0) - Number(right || 0)) / max;
+}
+
+function shouldAutoApplyCoverage(summary, applySources) {
+  if (Number(summary?.totals?.fatalCoverageErrors || 0) > 0) return false;
+  const wanted = new Set(String(applySources || 'claude,codex').split(',').map(value => value.trim()).filter(Boolean));
+  return (summary.sources || []).some(source =>
+    wanted.has(source.id)
+    && source.coverageRisk === 'trusted-event-level'
+    && Number(source.tokenEvents || 0) > 0
+  );
+}
+
+function printApplySummary(summary) {
+  const before = summary.before || {};
+  const after = summary.after || {};
+  const deltaSessions = Number(after.sessionRows || 0) - Number(before.sessionRows || 0);
+  const deltaEvents = Number(after.tokenEvents || 0) - Number(before.tokenEvents || 0);
+  console.log(`[token-studio] collect applied: sessions +${deltaSessions}, token_events +${deltaEvents}`);
+  if (summary.backup?.fileName) console.log(`[token-studio] backup ${summary.backup.fileName}`);
+  for (const source of summary.sources || []) {
+    console.log(`[token-studio] ${source.id}: ${source.coverageRisk}, events=${source.tokenEvents}, sessions=${source.sessionRows}`);
+  }
 }
 
 function openUrl(url) {
@@ -501,6 +828,33 @@ function openUrl(url) {
     windowsHide: true
   });
   child.unref();
+}
+
+function parseCommand(argv) {
+  const commands = new Set([
+    'auto',
+    'start',
+    'open',
+    'demo',
+    'live',
+    'statusline',
+    'collect',
+    'coverage',
+    'compare-ccusage',
+    'collectors',
+    'import-usage',
+    'budget',
+    'report',
+    'policy',
+    'doctor',
+    'privacy-check'
+  ]);
+  const first = argv[0];
+  if (!first) return { command: 'auto', args: [] };
+  if (first === 'help' || first === '--help' || first === '-h') return { command: 'help', args: argv.slice(1) };
+  if (!first.startsWith('-') && commands.has(first)) return { command: first, args: argv.slice(1) };
+  if (!first.startsWith('-')) return { command: first, args: argv.slice(1) };
+  return { command: 'auto', args: argv };
 }
 
 function parseArgs(argv) {
@@ -535,6 +889,7 @@ function printHelp() {
     'Token Studio ROI',
     '',
     'Commands:',
+    '  token-studio [--db data/usage.sqlite] [--no-collect|--dry-run-only]',
     '  token-studio demo [--seed-only] [--db data/demo.sqlite]',
     '  token-studio start [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
     '  token-studio open [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
@@ -542,12 +897,15 @@ function printHelp() {
     '  token-studio statusline [--db data/usage.sqlite] [--window-minutes 15] [--format text|json]',
     '  token-studio collectors [--json]',
     '  token-studio collectors --audit [--json]',
+    '  token-studio coverage --sources claude,codex,cursor [--json]',
+    '  token-studio compare-ccusage --report=session --json --yes',
     '  token-studio import-usage --format=ccusage-json --file <path|-> [--dry-run|--apply]',
     '  token-studio import-usage --format=ccusage-cli --report=<daily|weekly|monthly|session|blocks> [--dry-run|--apply] [--yes]',
     '  token-studio budget list|set|delete',
     '  token-studio report --period=week --format=table|markdown|json',
     '  token-studio policy --format=markdown|claude-md|agents-md',
-    '  token-studio collect --sources claude,codex [--yes]',
+    '  token-studio collect --dry-run --sources claude,codex,cursor',
+    '  token-studio collect --apply --yes --sources claude,codex',
     '  token-studio doctor',
     '  token-studio privacy-check [--include-untracked]'
   ].join('\n'));

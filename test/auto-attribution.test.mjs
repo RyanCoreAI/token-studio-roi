@@ -88,6 +88,29 @@ test('high input low output only creates low-confidence review suggestions', () 
   assert.equal(suggestion.canApply, false);
 });
 
+test('model layer and recent activity only create low-confidence drafts', () => {
+  const suggestion = buildAutoAttributionSuggestion({
+    ...baseSession,
+    sessionId: 'heavy-active',
+    projectPath: '',
+    model: 'gpt-5.5',
+    inputTokens: 70_000,
+    outputTokens: 30_000,
+    totalTokens: 100_000,
+    lastActivity: '2026-06-16T12:00:00Z'
+  }, {
+    now: new Date('2026-06-17T00:00:00Z')
+  });
+
+  assert.equal(suggestion.values.taskType, '技术调研');
+  assert.equal(suggestion.values.workPurpose, '技术调研');
+  assert.equal(suggestion.values.workStage, '探索');
+  assert.equal(suggestion.values.outputStatus, '进行中');
+  assert.equal(suggestion.annotationConfidence, 60);
+  assert.equal(suggestion.canApply, false);
+  assert.match(suggestion.annotationReason, /模型层级/);
+});
+
 test('manual or imported annotations are never suggested for overwrite', () => {
   assert.equal(buildAutoAttributionSuggestion({
     ...baseSession,

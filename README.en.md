@@ -5,8 +5,10 @@
 **Local AI Coding ROI Studio.** Token Studio ROI is a local, privacy-first AI coding review tool. It does more than count tokens: it connects official-price token usage to projects, tasks, work stages, output evidence, and model strategy.
 
 ```bash
-npx token-studio demo
+npx token-studio
 ```
+
+The default command runs read-only local coverage, writes trusted Claude/Codex event-level token records into local SQLite, then opens the browser. `demo` is only for synthetic product walkthroughs.
 
 Remember three differences:
 
@@ -14,7 +16,7 @@ Remember three differences:
 - **Savings Simulator**: simulate model-switching savings with official public token prices.
 - **Model Policy**: turn usage history into next week's light/mid/heavy model strategy.
 
-By default it does not read, display, or upload conversation content. Real collection requires explicit confirmation.
+By default it does not read, display, or upload conversation content; it only reads structured token/model/time/session metadata.
 
 ## Why Not ccusage / CodeBurn?
 
@@ -34,6 +36,7 @@ v4.8 focuses on decisions, not only metering, and uses npm one-command launch, S
 - **ccusage JSON Import**: imports documented ccusage JSON output for broader structured usage coverage while recomputing costs with Token Studio official pricing.
 - **ccusage CLI Bridge UX**: the Dashboard only generates copyable local commands; the browser never runs external scanners.
 - **Source Health Center**: shows native stable, experimental, detected-only, and ccusage import-bridge status, recent usage, token-field trust, and privacy boundaries without exposing full local paths.
+- **Collection Coverage Gate**: run `token-studio coverage` before real import/apply to verify whether Claude/Codex have event-level history and whether Cursor is only detected without reliable token fields.
 - **Import / Budget Wizard**: paste or upload ccusage JSON in the Dashboard, dry-run first, inspect shape/session/event counts, unsafe fields, and unpriced models, then explicitly apply to SQLite.
 - **Quota Profiles v2**: supports rolling/fixed custom guardrail windows, reset anchors, warning thresholds, burn projection, reset countdown, and near/over/exceeded warnings on `/live`.
 - **Statusline Guardrails**: `token-studio statusline` prints recent-window tokens, burn rate, cache, budget usage, unpriced-model warnings, and open actions for terminal prompts, tmux, or Claude Code statusline.
@@ -49,21 +52,29 @@ All dollar values are official-price conversions or simulations, not provider in
 Recommended Node.js: 24. Minimum: `>=22.12.0`.
 
 ```bash
-npx token-studio demo
+npx token-studio
 ```
 
 Expected output:
 
 ```text
-[demo] seeded 3 sessions and 2 daily rows into .../data/demo.sqlite
-[token-studio] UI  http://127.0.0.1:5173/  (Demo Mode)
+[token-studio] coverage claude,codex,cursor (read-only)
+[token-studio] collect applied: sessions +..., token_events +...
+[token-studio] UI  http://127.0.0.1:5173/
 [token-studio] API http://127.0.0.1:4173
 ```
 
 Common commands:
 
 ```bash
+npx token-studio
+npx token-studio --no-collect
+npx token-studio --dry-run-only
+npx token-studio demo
 npx token-studio start
+npx token-studio coverage --sources=claude,codex,cursor --json
+npx token-studio collect --dry-run --sources=claude,codex,cursor --json
+npx token-studio collect --apply --yes --sources=claude,codex
 npx token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes
 npx token-studio statusline --format=text
 npx token-studio collectors
@@ -76,10 +87,10 @@ From source:
 git clone https://github.com/RyanCoreAI/token-studio-roi.git
 cd token-studio-roi
 npm install
-npm run demo
+node src/cli.mjs
 ```
 
-`demo` uses synthetic data and does not scan real `.claude`, `.codex`, Cursor, or Copilot logs. `start` reads an existing SQLite database and does not collect automatically. The `ccusage-cli` bridge explicitly runs the external ccusage local scanner; Token Studio only accepts structured JSON, rejects conversation-like fields, and ignores third-party cost fields.
+`npx token-studio` scans structured token metadata from local `.claude`, `.codex`, and Cursor locations; it automatically writes only trusted Claude/Codex event-level records, while Cursor without explicit token fields stays detected/no-token-fields. `--no-collect` starts an existing SQLite database only, `--dry-run-only` runs coverage without writing, and `demo` uses synthetic data. The default DB path is `data/usage.sqlite` under the command's working directory; use `--db` or `DB_PATH` to choose another location. The Dashboard shows a data-source status: Demo Mode, Empty DB, Real DB - aggregate only, Real DB - event data needs coverage, or Real DB - event verified. `event verified` requires token events plus a passed coverage gate or a verifiable collect run. The `ccusage-cli` bridge explicitly runs the external ccusage local scanner; Token Studio only accepts structured JSON, rejects conversation-like fields, and ignores third-party cost fields.
 
 See [docs/first-run.md](docs/first-run.md) for the first-run flow. The Dashboard also derives first-run guidance from the current database: no data points to demo/import, data without actions points to `/review`, and budgets without event-level live data explain the `/live` window behavior.
 
@@ -93,13 +104,18 @@ These screenshots are from demo mode or sanitized synthetic data, not real local
 
 ![Token Studio ROI live guardrails](docs/assets/token-studio-v45-live.png)
 
-Real collection requires explicit confirmation:
+Advanced troubleshooting commands:
 
 ```bash
-npx token-studio collect --sources=claude,codex
+npx token-studio coverage --sources=claude,codex,cursor --json
+npx token-studio collect --dry-run --sources=claude,codex,cursor
+npx token-studio collect --apply --yes --sources=claude,codex
+npx token-studio compare-ccusage --report=session --json --yes
 ```
 
-Non-interactive shells refuse collection unless `--yes` is passed.
+`coverage` and `--dry-run` report candidate files, parseable token records, skip reasons, historical time range, and daily/session/event token reconciliation without writing SQLite. `--apply` creates a SQLite backup before writing; if Claude/Codex have parseable token records but would write zero `token_events`, or if daily/session/event totals differ by more than 1%, the coverage gate blocks the apply. Cursor writes usage only when local `state.vscdb` exposes explicit token fields; otherwise it reports “detected but no reliable token fields” and never estimates usage.
+
+Token Studio cannot promise to reconstruct every historical token. It can only cover local history that still exists on disk and contains reliable structured token fields; data deleted upstream or never recorded with token fields cannot be recovered.
 
 ## Core Features
 
@@ -115,6 +131,7 @@ Non-interactive shells refuse collection unless `--yes` is passed.
 - Model Policy / ROI Playbook export: generates Markdown, Claude Code, or AGENTS-style strategy snippets from local structured history without writing files.
 - ccusage Import Bridge: `token-studio import-usage --format=ccusage-json` imports saved structured JSON, and `--format=ccusage-cli` explicitly invokes ccusage CLI; both avoid conversation content and third-party cost estimates.
 - Source Health Center: the Dashboard and `/api/source-health` show support tier, detected status, recent import/collection summary, and token-field trust without leaking full local paths.
+- Collection Coverage Gate: `token-studio coverage`, `GET /api/collection-coverage`, and the Dashboard collection-trust card show historical range, event/session/daily reconciliation, uncovered sources, and failure reasons.
 - Import / Budget Wizard: dashboard entry for ccusage JSON dry-run/apply, ccusage CLI Bridge command generation, and budget-window creation.
 - Quota Profiles v2: source-level custom token/cost guardrails with rolling/fixed windows, reset anchors, warning thresholds, and near/over/exceeded warnings.
 - Live Monitor: `/live` shows recent 15-minute token, model, cache, burn-rate metadata, budget windows, and guardrail warnings.
@@ -205,6 +222,9 @@ Default URLs:
 - [ ] `npm test`
 - [ ] `npm run build`
 - [ ] `npm run privacy:check`
+- [ ] `node src/cli.mjs coverage --sources=claude,codex,cursor --json`
+- [ ] `npm view token-studio version` is lower than this package version before publishing
+- [ ] `npm pack --dry-run`
 - [ ] demo screenshots come from demo mode
 - [ ] `/live` loads from demo mode or temporary SQLite
 - [ ] no real `data/usage.sqlite`

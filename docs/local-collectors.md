@@ -28,13 +28,30 @@ See [collector-support-matrix.md](collector-support-matrix.md) for status, priva
 ## Commands
 
 ```bash
+node src/cli.mjs
+node src/cli.mjs --no-collect
+node src/cli.mjs --dry-run-only
 node src/cli.mjs doctor
 node src/cli.mjs collectors
-node src/cli.mjs collect --sources=claude,codex
-node src/cli.mjs collect --sources=cursor --yes
+node src/cli.mjs coverage --sources=claude,codex,cursor --json
+node src/cli.mjs collect --dry-run --sources=claude,codex,cursor
+node src/cli.mjs collect --apply --yes --sources=claude,codex
+node src/cli.mjs compare-ccusage --report=session --json --yes
 ```
 
-`collect` requires explicit confirmation. Non-interactive shells refuse to scan local AI logs unless `--yes` is provided.
+The bare `node src/cli.mjs` command runs coverage, applies trusted Claude/Codex event-level rows, and starts the browser UI. Use `--no-collect` to only open the current SQLite and `--dry-run-only` to run coverage without writing.
+
+`coverage` is the publish/readiness gate. It runs the same local collector dry-run but adds historical range, source-level coverage risk, and `candidateRecords -> tokenEvents -> sessions -> daily` reconciliation. It does not write SQLite.
+
+`collect` requires an explicit mode. `--dry-run` scans local metadata and prints candidate file counts, parseable token records, skip reasons, expected row counts, historical range, and token totals without writing SQLite. `--apply` writes only after confirmation or `--yes`, creates a SQLite backup first, and prints before/after row counts. If Claude/Codex have parseable token records but would write zero `token_events`, or if daily/session/event totals differ by more than 1%, apply is blocked.
+
+Running `node src/collect.mjs` or `npm run collect` without `--dry-run` or `--apply` refuses to scan and refuses to modify SQLite. This prevents bypassing the CLI confirmation boundary.
+
+Cursor is conservative: Token Studio reads only explicit token fields from local `state.vscdb`. If Cursor does not expose token fields on a machine, Token Studio reports `detected-no-token-fields` and does not estimate from text length.
+
+`compare-ccusage` explicitly runs ccusage JSON mode and compares token structure with Token Studio's dry-run output. It does not adopt ccusage cost fields; Token Studio still recomputes official-price cost itself.
+
+Historical coverage is bounded by what the local upstream tools kept on disk. Deleted logs, logs without token fields, and UI-only conversation text cannot be reconstructed accurately.
 
 ## Environment
 

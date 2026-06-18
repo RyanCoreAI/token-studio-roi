@@ -66,6 +66,7 @@ export function buildSourceHealth({
       lastSeenAt,
       lastRunStatus: run?.status || null,
       lastRunAt: run?.collectedAt || null,
+      lastRunMessage: sanitizeRunMessage(run?.message),
       health: healthStatus({ collector, stats, run, lastSeenAt }),
       note: collector.note || null
     };
@@ -98,7 +99,8 @@ function latestRunBySource(runs) {
       map.set(key, {
         source: run.source,
         status: run.status || null,
-        collectedAt: run.collectedAt || null
+        collectedAt: run.collectedAt || null,
+        message: run.message || null
       });
     }
   }
@@ -167,8 +169,8 @@ function commandHintFor(collector) {
   if (collector.id === 'ccusage') {
     return 'npx token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes';
   }
-  if (collector.supportStatus === 'stable') return `npx token-studio collect --sources=${collector.id}`;
-  if (collector.supportStatus === 'experimental') return 'npx token-studio collectors --audit --json';
+  if (collector.supportStatus === 'stable') return `npx token-studio collect --dry-run --sources=${collector.id}`;
+  if (collector.supportStatus === 'experimental') return `npx token-studio collect --dry-run --sources=${collector.id}`;
   return 'npx token-studio collectors --json';
 }
 
@@ -192,4 +194,13 @@ function latestDate(values) {
 
 function normalizeKey(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function sanitizeRunMessage(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  return text
+    .replace(/[A-Z]:[\\/][^\s;]+/g, '[local-path]')
+    .replace(/\/(?:Users|home)\/[^\s;]+/g, '[local-path]')
+    .slice(0, 280);
 }

@@ -1,4 +1,5 @@
 .git/
+.github/
 .DS_Store
 *.log
 *.tgz
@@ -7,6 +8,8 @@ node_modules/
 .npm-cache/
 dist/
 coverage/
+scripts/
+test/
 
 .env
 .env.*

@@ -37,6 +37,7 @@ function HeroSection({ period, totals, prevTotals, stats }) {
             </span>
           </>
         )}
+        。先看哪些 token 形成了产出，再看哪些模型该降级，最后沉淀下周行动清单。
       </p>
 
       <div className="hero-meta">
