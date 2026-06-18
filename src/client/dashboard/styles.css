@@ -1857,33 +1857,87 @@ button, input, select { font-family: inherit; color: inherit; }
   flex-direction: column;
   gap: 8px;
 }
+.top-models-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.top-model-bars {
+  max-height: 512px;
+  overflow: hidden;
+  padding-right: 2px;
+}
+.top-model-bars.expanded {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.top-model-bars.expanded::-webkit-scrollbar { width: 8px; }
+.top-model-bars.expanded::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 999px;
+}
 .bar-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(82px, auto);
   align-items: center;
-  gap: 12px;
-  padding: 8px 4px;
+  gap: 16px;
+  min-height: 74px;
+  padding: 10px 8px;
   border-radius: 6px;
   cursor: pointer;
 }
 .bar-row:hover { background: var(--surface-2); }
 .bar-label {
-  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 6px;
+  min-width: 0;
 }
 .bar-label .model {
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 650;
   color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .bar-label .meta {
   font-size: 11px;
   color: var(--muted);
-  display: flex; gap: 8px; align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, max-content) auto;
+  gap: 10px;
+  align-items: center;
   white-space: nowrap;
   overflow: hidden;
 }
 .bar-label .meta > * { white-space: nowrap; flex-shrink: 0; }
+.source-chip-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.compact-tag {
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.muted-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
 .bar-track {
   margin-top: 4px;
   height: 6px;
@@ -1912,6 +1966,20 @@ button, input, select { font-family: inherit; color: inherit; }
   color: var(--muted);
   margin-top: 2px;
   white-space: nowrap;
+}
+.bar-row-more {
+  width: 100%;
+  min-height: 36px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.bar-row-more:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 /* ─── Cache hit-rate gauge ───────────────────────────────── */
@@ -3148,6 +3216,34 @@ table.dt input[type="checkbox"] {
   }
   .model-card-grid {
     grid-template-columns: 1fr;
+  }
+  .top-models-actions {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+  .top-model-bars {
+    max-height: 430px;
+  }
+  .bar-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    min-height: 0;
+  }
+  .bar-value {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    text-align: left;
+  }
+  .bar-value small {
+    margin-top: 0;
+  }
+  .bar-label .meta {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .compact-tag {
+    max-width: 96px;
   }
   .model-card-meta,
   .model-card-sub {

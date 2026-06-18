@@ -35,6 +35,14 @@ import {
 import { buildFirstRunState } from './onboarding.js';
 import './styles.css';
 
+function formatApiConnectionError(error, action = '请求') {
+  const message = error?.message || '';
+  if (message === 'Failed to fetch' || error?.name === 'TypeError') {
+    return `${action}失败：本地 API 服务没有连上。请关闭旧页面，重新运行 npx token-studio，并打开终端输出的最新本地 URL。`;
+  }
+  return message || `${action}失败`;
+}
+
 function summarizeCollectOutput(stdout) {
   return stdout
     ? stdout.split('\n').filter(Boolean).slice(-5).join(' · ')
@@ -675,7 +683,7 @@ function Dashboard({
       setLastAutoRunId(result.runId || null);
       setAutoAttributionMessage({ type: 'ok', text: `已自动归因 ${result.applied || 0} 个 session` });
     } catch (error) {
-      setAutoAttributionMessage({ type: 'error', text: error.message || '自动归因失败' });
+      setAutoAttributionMessage({ type: 'error', text: formatApiConnectionError(error, '自动归因') });
     } finally {
       setAutoAttributionBusy(false);
     }
@@ -690,7 +698,7 @@ function Dashboard({
       setLastAutoRunId(null);
       setAutoAttributionMessage({ type: 'ok', text: `已撤销 ${result.deleted || 0} 个自动归因` });
     } catch (error) {
-      setAutoAttributionMessage({ type: 'error', text: error.message || '撤销失败' });
+      setAutoAttributionMessage({ type: 'error', text: formatApiConnectionError(error, '撤销自动归因') });
     } finally {
       setAutoAttributionBusy(false);
     }

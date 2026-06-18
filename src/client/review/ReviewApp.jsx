@@ -17,6 +17,14 @@ import { buildReviewTrustState } from './review-trust.js';
 import { buildEvidenceZeroState, buildSavingsEmptyReason } from './review-empty-states.js';
 import './styles.css';
 
+function formatApiConnectionError(error, action = '请求') {
+  const message = error?.message || '';
+  if (message === 'Failed to fetch' || error?.name === 'TypeError') {
+    return `${action}失败：本地 API 服务没有连上。请关闭旧页面，重新运行 npx token-studio，并打开终端输出的最新本地 URL。`;
+  }
+  return message || `${action}失败`;
+}
+
 export function ReviewApp() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -241,7 +249,7 @@ function ReviewDashboard({ rawData, onReloadData }) {
       setLazyAttributionState({
         busy: false,
         message: '',
-        error: error.message || '自动归因失败'
+        error: formatApiConnectionError(error, '自动归因')
       });
     }
   }, [onReloadData]);
@@ -284,21 +292,10 @@ function ReviewDashboard({ rawData, onReloadData }) {
       className: 'page',
       content: (
         <>
-          <ReviewTrustBanner state={trustState}/>
           <HeroSection period={period} totals={totals} prevTotals={prevTotals} stats={heroStats}/>
+          <ReviewTrustBanner state={trustState}/>
         </>
       )
-    },
-    {
-      id: 'evidence',
-      label: 'ROI 证据',
-      className: 'page',
-      content: <RoiEvidenceSection
-        evidence={roiEvidence}
-        zeroState={evidenceZeroState}
-        lazyState={lazyAttributionState}
-        onLazyAttribution={applyLazyAttribution}
-      />
     },
     {
       id: 'closure',
@@ -308,6 +305,17 @@ function ReviewDashboard({ rawData, onReloadData }) {
         progress={closureProgress}
         trustState={trustState}
         projectCoverage={rawData.meta?.projectCoverage}
+        lazyState={lazyAttributionState}
+        onLazyAttribution={applyLazyAttribution}
+      />
+    },
+    {
+      id: 'evidence',
+      label: 'ROI 证据',
+      className: 'page',
+      content: <RoiEvidenceSection
+        evidence={roiEvidence}
+        zeroState={evidenceZeroState}
         lazyState={lazyAttributionState}
         onLazyAttribution={applyLazyAttribution}
       />

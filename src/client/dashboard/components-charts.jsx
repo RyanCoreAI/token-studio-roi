@@ -2,7 +2,7 @@
    Charts — Trend, Donut, TopModels, Heatmap, Gauge, Stat
    ============================================================= */
 
-import { Fragment, useEffect, useMemo, useRef } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { U } from '../shared/utils.js';
 import { Delta } from './components-top.jsx';
@@ -345,17 +345,27 @@ function SourceDonut({ rows, sources, total, onFocusSource, focused }) {
 // Top Models bar chart (HTML)
 // ───────────────────────────────────────────────────────────────
 function TopModels({ rows, onDrillModel }) {
+  const [expanded, setExpanded] = useState(false);
   const byModel = new Map();
   for (const r of rows) {
     if (!r.model) continue;
     const k = r.model;
-    if (!byModel.has(k)) byModel.set(k, { model: k, source: r.source, total: 0, cost: 0, count: 0 });
+    if (!byModel.has(k)) byModel.set(k, { model: k, source: r.source, sources: new Map(), total: 0, cost: 0, count: 0 });
     const m = byModel.get(k);
     m.total += r.totalTokens;
     m.cost  += r.costUSD;
     m.count += 1;
+    if (r.source) m.sources.set(r.source, (m.sources.get(r.source) || 0) + 1);
   }
-  const list = Array.from(byModel.values()).sort((a, b) => b.total - a.total).slice(0, 8);
+  const list = Array.from(byModel.values())
+    .sort((a, b) => b.total - a.total)
+    .map(row => ({
+      ...row,
+      sourceList: Array.from(row.sources.entries()).sort((a, b) => b[1] - a[1])
+    }));
+  const collapsedCount = 5;
+  const visibleList = expanded ? list : list.slice(0, collapsedCount);
+  const hiddenCount = Math.max(0, list.length - visibleList.length);
   const max = list[0]?.total || 1;
 
   return (
@@ -365,18 +375,33 @@ function TopModels({ rows, onDrillModel }) {
           <h2 className="panel-title">Top 模型</h2>
           <p className="panel-sub">按总 Token 排序 · {list.length} 个</p>
         </div>
-        <span style={{fontSize: 11, color: 'var(--muted)'}}>Tokens · 官方价</span>
+        <div className="top-models-actions">
+          <span>Tokens · 官方价</span>
+          {list.length > collapsedCount && (
+            <button
+              type="button"
+              className="btn btn-mini"
+              onClick={() => setExpanded(v => !v)}>
+              {expanded ? '收起' : `展开 ${list.length} 个`}
+            </button>
+          )}
+        </div>
       </div>
-      <div className="bars">
+      <div className={`bars top-model-bars ${expanded ? 'expanded' : ''}`}>
         {list.length === 0 && <div className="empty">当前筛选下无数据</div>}
-        {list.map(m => (
+        {visibleList.map(m => (
           <div key={m.model} className="bar-row" onClick={() => onDrillModel?.(m)}>
             <div className="bar-label">
               <div className="model">{m.model}</div>
               <div className="meta">
-                <span className="tag">
-                  <span className="tag-dot" style={{background: U.getSourceColor(m.source)}}/>
-                  {m.source}
+                <span className="source-chip-list">
+                  {m.sourceList.slice(0, 2).map(([source]) => (
+                    <span className="tag compact-tag" key={source}>
+                      <span className="tag-dot" style={{background: U.getSourceColor(source)}}/>
+                      {source}
+                    </span>
+                  ))}
+                  {m.sourceList.length > 2 && <span className="muted-chip">+{m.sourceList.length - 2}</span>}
                 </span>
                 <span>{m.count} 条记录</span>
               </div>
@@ -394,6 +419,14 @@ function TopModels({ rows, onDrillModel }) {
             </div>
           </div>
         ))}
+        {!expanded && hiddenCount > 0 && (
+          <button
+            type="button"
+            className="bar-row-more"
+            onClick={() => setExpanded(true)}>
+            还有 {hiddenCount} 个模型，展开查看
+          </button>
+        )}
       </div>
     </div>
   );

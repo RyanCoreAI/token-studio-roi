@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.8.8
+
+- Tightened the Dashboard Top Models card so model rows align consistently, source chips stay compact, and long model lists collapse by default with an in-card expanded scroll state.
+- Moved the `/review` data-source trust banner below the overview and put the closure page before ROI evidence so users see the review workflow before the score.
+- Replaced raw `Failed to fetch` auto-attribution errors with a clear local API connection hint for stale pages or stopped API services.
+
 ## 4.8.7
 
 - Added `/review` data-source trust messaging so users can distinguish demo, old aggregate databases, old services, and real event-verified token data.
