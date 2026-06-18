@@ -32,7 +32,7 @@ export function ReviewApp() {
 
   const loadData = useCallback(() => {
     setError(null);
-    fetch('/api/data')
+    return fetch('/api/data')
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(d => { setData(d); setLoading(false); })
       .catch(e => { setError(e.message); setLoading(false); });
@@ -87,6 +87,14 @@ function ReviewDashboard({ rawData, onReloadData }) {
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [advisorActions, setAdvisorActions] = useState(rawData.advisorActions || []);
   const [lazyAttributionState, setLazyAttributionState] = useState({ busy: false, message: '', error: '' });
+  const [evidenceAutopilotState, setEvidenceAutopilotState] = useState({
+    busy: false,
+    applyingId: '',
+    message: '',
+    error: '',
+    plan: null,
+    dismissedIds: []
+  });
   const pageRefs = useRef([]);
   const period = useMemo(() => RU.getPeriod(periodId, TODAY, rawData.daily), [periodId, rawData.daily]);
   const prevPeriod = useMemo(() => period.prev
@@ -254,6 +262,116 @@ function ReviewDashboard({ rawData, onReloadData }) {
     }
   }, [onReloadData]);
 
+  const loadEvidenceAutopilotPlan = useCallback(async () => {
+    const response = await fetch(`/api/evidence-suggestions?period=${encodeURIComponent(periodId)}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    return payload.plan || null;
+  }, [periodId]);
+
+  const runEvidenceAutopilot = useCallback(async () => {
+    setEvidenceAutopilotState(current => ({
+      ...current,
+      busy: true,
+      applyingId: '',
+      message: '',
+      error: ''
+    }));
+    try {
+      const plan = await loadEvidenceAutopilotPlan();
+      const suggestionIds = plan?.summary?.canApplyIds || [];
+      if (!suggestionIds.length) {
+        setEvidenceAutopilotState(current => ({
+          ...current,
+          busy: false,
+          plan,
+          message: '已生成待确认队列；当前没有可直接写入的高置信证据。',
+          error: ''
+        }));
+        return;
+      }
+      const response = await fetch('/api/evidence-suggestions/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period: periodId, suggestionIds })
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+      const result = await response.json();
+      let refreshedPlan = result.plan || plan;
+      try {
+        refreshedPlan = await loadEvidenceAutopilotPlan();
+      } catch {
+        // Keep the apply result visible if the follow-up read fails.
+      }
+      setEvidenceAutopilotState(current => ({
+        ...current,
+        busy: false,
+        plan: refreshedPlan,
+        message: `已应用 ${result.appliedAnnotations || 0} 条归因证据、${result.appliedOutputs || 0} 条产出链接；自动证据不等同人工确认。`,
+        error: ''
+      }));
+      await onReloadData?.();
+    } catch (error) {
+      setEvidenceAutopilotState(current => ({
+        ...current,
+        busy: false,
+        message: '',
+        error: formatApiConnectionError(error, '生成复盘证据')
+      }));
+    }
+  }, [loadEvidenceAutopilotPlan, onReloadData, periodId]);
+
+  const applyEvidenceSuggestion = useCallback(async (suggestionId) => {
+    if (!suggestionId) return;
+    setEvidenceAutopilotState(current => ({ ...current, applyingId: suggestionId, error: '', message: '' }));
+    try {
+      const response = await fetch('/api/evidence-suggestions/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period: periodId, suggestionIds: [suggestionId] })
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+      const result = await response.json();
+      let refreshedPlan = result.plan;
+      try {
+        refreshedPlan = await loadEvidenceAutopilotPlan();
+      } catch {
+        // Keep the apply result visible if the follow-up read fails.
+      }
+      setEvidenceAutopilotState(current => ({
+        ...current,
+        applyingId: '',
+        plan: refreshedPlan || current.plan,
+        message: `已应用 ${result.appliedAnnotations || 0} 条归因证据、${result.appliedOutputs || 0} 条产出链接。`,
+        error: ''
+      }));
+      await onReloadData?.();
+    } catch (error) {
+      setEvidenceAutopilotState(current => ({
+        ...current,
+        applyingId: '',
+        error: formatApiConnectionError(error, '应用复盘证据')
+      }));
+    }
+  }, [onReloadData, periodId]);
+
+  const dismissEvidenceSuggestion = useCallback((suggestionId) => {
+    if (!suggestionId) return;
+    setEvidenceAutopilotState(current => ({
+      ...current,
+      dismissedIds: Array.from(new Set([...(current.dismissedIds || []), suggestionId]))
+    }));
+  }, []);
+
   // Period nav
   const ORDER = ['week', 'month', 'prev', '90d', 'all'];
   const idx = ORDER.indexOf(periodId);
@@ -318,6 +436,10 @@ function ReviewDashboard({ rawData, onReloadData }) {
         zeroState={evidenceZeroState}
         lazyState={lazyAttributionState}
         onLazyAttribution={applyLazyAttribution}
+        autopilotState={evidenceAutopilotState}
+        onRunAutopilot={runEvidenceAutopilot}
+        onApplyEvidenceSuggestion={applyEvidenceSuggestion}
+        onDismissEvidenceSuggestion={dismissEvidenceSuggestion}
       />
     },
     {
@@ -358,6 +480,10 @@ function ReviewDashboard({ rawData, onReloadData }) {
         onAddAction={addAdvisorAction}
         onSetActionStatus={setAdvisorActionStatus}
         onLazyAttribution={applyLazyAttribution}
+        autopilotState={evidenceAutopilotState}
+        onRunAutopilot={runEvidenceAutopilot}
+        onApplyEvidenceSuggestion={applyEvidenceSuggestion}
+        onDismissEvidenceSuggestion={dismissEvidenceSuggestion}
       />
     },
     {
@@ -389,6 +515,10 @@ function ReviewDashboard({ rawData, onReloadData }) {
         strategy={modelStrategy}
         lazyState={lazyAttributionState}
         onLazyAttribution={applyLazyAttribution}
+        autopilotState={evidenceAutopilotState}
+        onRunAutopilot={runEvidenceAutopilot}
+        onApplyEvidenceSuggestion={applyEvidenceSuggestion}
+        onDismissEvidenceSuggestion={dismissEvidenceSuggestion}
       />
     },
     {
@@ -397,7 +527,7 @@ function ReviewDashboard({ rawData, onReloadData }) {
       className: 'page',
       content: <InsightsSection insights={insights}/>
     }
-  ], [period, totals, prevTotals, heroStats, trustState, roiEvidence, evidenceZeroState, lazyAttributionState, applyLazyAttribution, closureProgress, rawData.meta, daily, roiAdvice, savingsSimulation, savingsEmptyReason, modelStrategy, insights, actionsByRule, periodAdvisorActions, addAdvisorAction, setAdvisorActionStatus]);
+  ], [period, totals, prevTotals, heroStats, trustState, roiEvidence, evidenceZeroState, lazyAttributionState, applyLazyAttribution, evidenceAutopilotState, runEvidenceAutopilot, applyEvidenceSuggestion, dismissEvidenceSuggestion, closureProgress, rawData.meta, daily, roiAdvice, savingsSimulation, savingsEmptyReason, modelStrategy, insights, actionsByRule, periodAdvisorActions, addAdvisorAction, setAdvisorActionStatus]);
 
   const goToReviewPage = useCallback((index) => {
     const nextIndex = Math.max(0, Math.min(reviewPages.length - 1, index));
@@ -460,6 +590,12 @@ function ReviewDashboard({ rawData, onReloadData }) {
             ))}
           </div>
           <div className="nav-actions">
+            <button className="nav-btn primary" onClick={runEvidenceAutopilot} disabled={evidenceAutopilotState.busy}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                <path d="M6.5 1.5l1.1 3.2 3.4 1-3.4 1-1.1 3.3-1.1-3.3-3.4-1 3.4-1 1.1-3.2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+              </svg>
+              {evidenceAutopilotState.busy ? '生成中' : '生成复盘证据'}
+            </button>
             <button className="nav-btn primary" onClick={exportMarkdown}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                 <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5M2.5 10.5h8" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>

@@ -995,6 +995,165 @@ section.story:last-of-type  { padding-bottom: 56px; }
   font-weight: 600;
 }
 
+.evidence-autopilot-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--rule-2);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--indigo), var(--paper) 96%);
+}
+
+.evidence-autopilot-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.evidence-autopilot-head span,
+.evidence-autopilot-row-title span,
+.evidence-autopilot-summary span,
+.evidence-autopilot-meta span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.evidence-autopilot-head strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.evidence-autopilot-head p,
+.evidence-autopilot-empty,
+.evidence-autopilot-message,
+.evidence-autopilot-error {
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.evidence-autopilot-head button,
+.evidence-autopilot-actions button,
+.evidence-autopilot-actions a {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.evidence-autopilot-head button:disabled,
+.evidence-autopilot-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.evidence-autopilot-message {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.evidence-autopilot-error {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.evidence-autopilot-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.evidence-autopilot-summary span {
+  padding: 6px 8px;
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  background: var(--paper);
+}
+
+.evidence-autopilot-list {
+  display: grid;
+  gap: 8px;
+  max-height: 430px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.evidence-autopilot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--rule-2);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.evidence-autopilot-row.can-apply {
+  border-color: color-mix(in oklab, var(--good), var(--rule-2) 55%);
+}
+
+.evidence-autopilot-row-title strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.evidence-autopilot-row-main p {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.evidence-autopilot-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.evidence-autopilot-meta span {
+  padding: 4px 7px;
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  background: var(--paper-2);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.evidence-autopilot-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.evidence-autopilot-actions .ghost {
+  border-color: var(--rule);
+  background: var(--paper);
+  color: var(--ink-2);
+}
+
 /* ─── ROI evidence score ─────────────────────────────────── */
 
 .evidence-section {
@@ -2558,6 +2717,25 @@ section.story:last-of-type  { padding-bottom: 56px; }
   .closure-gap-rank { width: 100%; justify-content: start; padding-left: 9px; }
   .closure-gap-row b,
   .closure-gap-row > div:last-child span { text-align: left; }
+  .evidence-autopilot-head,
+  .evidence-autopilot-row {
+    grid-template-columns: 1fr;
+  }
+  .evidence-autopilot-head {
+    display: grid;
+  }
+  .evidence-autopilot-head button,
+  .evidence-autopilot-actions button,
+  .evidence-autopilot-actions a {
+    width: 100%;
+  }
+  .evidence-autopilot-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .evidence-autopilot-list {
+    max-height: 360px;
+  }
   .savings-hero { grid-template-columns: 1fr; }
   .savings-card { grid-template-columns: 1fr; }
   .savings-head { flex-direction: column; }

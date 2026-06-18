@@ -148,7 +148,16 @@ function ReadableGate({ label, value, note, done }) {
   );
 }
 
-function RoiEvidenceSection({ evidence, zeroState, lazyState, onLazyAttribution }) {
+function RoiEvidenceSection({
+  evidence,
+  zeroState,
+  lazyState,
+  onLazyAttribution,
+  autopilotState,
+  onRunAutopilot,
+  onApplyEvidenceSuggestion,
+  onDismissEvidenceSuggestion
+}) {
   if (!evidence) return null;
   const showZeroState = zeroState?.isZero;
   return (
@@ -167,7 +176,15 @@ function RoiEvidenceSection({ evidence, zeroState, lazyState, onLazyAttribution 
           <ul>
             {zeroState.missing.map(item => <li key={item}>{item}</li>)}
           </ul>
-          <LazyAttributionButton state={lazyState} onClick={onLazyAttribution}/>
+          <div>
+            <EvidenceAutopilotPanel
+              state={autopilotState}
+              onRun={onRunAutopilot}
+              onApply={onApplyEvidenceSuggestion}
+              onDismiss={onDismissEvidenceSuggestion}
+            />
+            <LazyAttributionButton state={lazyState} onClick={onLazyAttribution}/>
+          </div>
         </div>
       ) : (
         <div className="evidence-hero">
@@ -201,6 +218,14 @@ function RoiEvidenceSection({ evidence, zeroState, lazyState, onLazyAttribution 
             </div>
           ))}
         </div>
+      )}
+      {!showZeroState && (
+        <EvidenceAutopilotPanel
+          state={autopilotState}
+          onRun={onRunAutopilot}
+          onApply={onApplyEvidenceSuggestion}
+          onDismiss={onDismissEvidenceSuggestion}
+        />
       )}
     </section>
   );
@@ -472,7 +497,19 @@ function MiniSpark({ values, color }) {
 // ───────────────────────────────────────────────────────────────
 // Savings simulator — official-price model switching simulation
 // ───────────────────────────────────────────────────────────────
-function SavingsSimulatorSection({ simulation, emptyReason, lazyState, actionsByRule = new Map(), onAddAction, onSetActionStatus, onLazyAttribution }) {
+function SavingsSimulatorSection({
+  simulation,
+  emptyReason,
+  lazyState,
+  actionsByRule = new Map(),
+  onAddAction,
+  onSetActionStatus,
+  onLazyAttribution,
+  autopilotState,
+  onRunAutopilot,
+  onApplyEvidenceSuggestion,
+  onDismissEvidenceSuggestion
+}) {
   if (!simulation) return null;
   const suggestions = simulation.suggestions || [];
   const unpriced = simulation.unpriced || {};
@@ -548,6 +585,12 @@ function SavingsSimulatorSection({ simulation, emptyReason, lazyState, actionsBy
             ))}
           </ul>
           <p>{emptyReason?.action || '补齐任务、阶段和价值后再看节省模拟。'}</p>
+          <EvidenceAutopilotPanel
+            state={autopilotState}
+            onRun={onRunAutopilot}
+            onApply={onApplyEvidenceSuggestion}
+            onDismiss={onDismissEvidenceSuggestion}
+          />
           <LazyAttributionButton state={lazyState} onClick={onLazyAttribution}/>
         </div>
       )}
@@ -856,7 +899,15 @@ async function copyText(text) {
 // ───────────────────────────────────────────────────────────────
 // Model Strategy — what model should be used for which work
 // ───────────────────────────────────────────────────────────────
-function ModelStrategySection({ strategy, lazyState, onLazyAttribution }) {
+function ModelStrategySection({
+  strategy,
+  lazyState,
+  onLazyAttribution,
+  autopilotState,
+  onRunAutopilot,
+  onApplyEvidenceSuggestion,
+  onDismissEvidenceSuggestion
+}) {
   if (!strategy) return null;
   const coverage = strategy.coverage;
   const taskRows = strategy.byTaskType.slice(0, 4);
@@ -890,7 +941,15 @@ function ModelStrategySection({ strategy, lazyState, onLazyAttribution }) {
               <h3>还没标注任务，但模型用量已经可见</h3>
               <p>下面是当前周期按模型聚合的真实 token、来源和官方价。策略建议需要补任务、阶段或价值后才会变准。</p>
             </div>
-            <LazyAttributionButton state={lazyState} onClick={onLazyAttribution}/>
+            <div>
+              <EvidenceAutopilotPanel
+                state={autopilotState}
+                onRun={onRunAutopilot}
+                onApply={onApplyEvidenceSuggestion}
+                onDismiss={onDismissEvidenceSuggestion}
+              />
+              <LazyAttributionButton state={lazyState} onClick={onLazyAttribution}/>
+            </div>
           </div>
           <div className="strategy-fact-list">
             {strategy.modelRows.slice(0, 5).map(row => (
@@ -1059,6 +1118,79 @@ function InsightsSection({ insights }) {
 }
 
 export { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection, ReviewTrustBanner };
+
+function EvidenceAutopilotPanel({ state, onRun, onApply, onDismiss }) {
+  const dismissed = new Set(state?.dismissedIds || []);
+  const rows = (state?.plan?.queue || []).filter(row => !dismissed.has(row.suggestionId)).slice(0, 10);
+  const summary = state?.plan?.summary || {};
+
+  return (
+    <div className="evidence-autopilot-panel">
+      <div className="evidence-autopilot-head">
+        <div>
+          <span>Evidence Autopilot</span>
+          <strong>一键生成复盘证据</strong>
+          <p>只用结构化 session、项目路径和 Git 元数据；不读正文、diff 或完整文件路径。</p>
+        </div>
+        <button type="button" disabled={state?.busy} onClick={onRun}>
+          {state?.busy ? '生成中…' : '生成证据'}
+        </button>
+      </div>
+
+      {state?.message && <div className="evidence-autopilot-message">{state.message}</div>}
+      {state?.error && <div className="evidence-autopilot-error">{state.error}</div>}
+
+      {state?.plan && (
+        <div className="evidence-autopilot-summary">
+          <span>可写入 {state.plan.canApplyCount || 0}</span>
+          <span>待确认 {state.plan.draftCount || 0}</span>
+          <span>Git 候选 {summary.gitOutputCandidates || 0}</span>
+        </div>
+      )}
+
+      {rows.length > 0 ? (
+        <div className="evidence-autopilot-list">
+          {rows.map(row => (
+            <article key={row.suggestionId} className={`evidence-autopilot-row ${row.canApply ? 'can-apply' : 'draft'}`}>
+              <div className="evidence-autopilot-row-main">
+                <div className="evidence-autopilot-row-title">
+                  <span>{row.provenance}</span>
+                  <strong>{row.title}</strong>
+                </div>
+                <p>{row.reason}</p>
+                <div className="evidence-autopilot-meta">
+                  <span>{row.category}</span>
+                  <span>{row.project || '未知项目'}</span>
+                  <span>{Math.round(row.confidence || 0)}%</span>
+                  <span>{U.compactCN(row.totalTokens || 0)} tokens</span>
+                  <span>{row.costUSD > 0 ? U.fmtUS.format(row.costUSD) : '未定价'}</span>
+                </div>
+              </div>
+              <div className="evidence-autopilot-actions">
+                {row.canApply ? (
+                  <button
+                    type="button"
+                    disabled={state?.applyingId === row.suggestionId}
+                    onClick={() => onApply?.(row.suggestionId)}
+                  >
+                    {state?.applyingId === row.suggestionId ? '写入中' : '接受建议'}
+                  </button>
+                ) : (
+                  <a href="/" title="回到看板编辑确认">编辑确认</a>
+                )}
+                <button type="button" className="ghost" onClick={() => onDismiss?.(row.suggestionId)}>
+                  忽略本次
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="evidence-autopilot-empty">点击生成后会列出最值得补的 10 条证据；能安全写入的高置信建议会标为“自动高置信”。</p>
+      )}
+    </div>
+  );
+}
 
 function LazyAttributionButton({ state, onClick }) {
   return (

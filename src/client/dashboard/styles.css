@@ -1714,6 +1714,30 @@ button, input, select { font-family: inherit; color: inherit; }
   word-break: break-word;
 }
 
+.source-health-recommendation {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.source-health-recommendation span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.source-health-recommendation p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.42;
+}
+
 .source-health-card code {
   min-width: 0;
   padding: 7px 8px;

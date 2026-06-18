@@ -1197,6 +1197,12 @@ function SourceHealthPanel({ rows = [], onOpenImportBudget }) {
               <span>{sourceHealthStatusLabel(row)}</span>
               {row.lastRunMessage && <small>{row.lastRunMessage}</small>}
             </div>
+            {row.recommendedImport && (
+              <div className="source-health-recommendation">
+                <span>推荐方式</span>
+                <p>{row.recommendedImport}</p>
+              </div>
+            )}
             <code>{row.commandHint}</code>
           </article>
         ))}

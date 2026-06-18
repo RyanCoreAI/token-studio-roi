@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.9.0
+
+- Added Evidence Autopilot on `/review`: a single action can generate high-confidence attribution, project aliases, output evidence suggestions, and model-strategy evidence without calling an LLM or reading prompt/response/transcript/diff content.
+- Added `GET /api/evidence-suggestions` and `POST /api/evidence-suggestions/apply` with the existing local JSON write boundary; selected suggestions are applied without overwriting manual annotations.
+- Added Git metadata output candidates: only repo name, remote host, commit hash, and commit time are inspected, and commit output links are written only when an HTTP(S) URL can be generated.
+- Turned ROI evidence, savings, and model-strategy zero states into actionable evidence queues so real token data can become reviewable work evidence faster.
+- Added Source Health recommendations that explain when to use native collection, audit, or the ccusage bridge instead of treating detected-only tools as covered usage.
+
 ## 4.8.8
 
 - Tightened the Dashboard Top Models card so model rows align consistently, source chips stay compact, and long model lists collapse by default with an in-card expanded scroll state.

@@ -13,8 +13,8 @@ The default command runs read-only local coverage, writes trusted Claude/Codex e
 Remember three differences:
 
 - **Work Evidence**: see where tokens went and which project/task/stage/output they belong to.
+- **Evidence Autopilot**: turn real tokens into project, task, stage, value, and output-evidence drafts with one action.
 - **Savings Simulator**: simulate model-switching savings with official public token prices.
-- **Model Policy**: turn usage history into next week's light/mid/heavy model strategy.
 
 By default it does not read, display, or upload conversation content; it only reads structured token/model/time/session metadata.
 
@@ -30,12 +30,14 @@ See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller compet
 
 ## What Makes ROI Different?
 
-v4.8 focuses on decisions, not only metering, and uses npm one-command launch, Source Health, a small CLI bridge, quota profiles, and statusline integrations to close coverage and live-entry gaps without turning Token Studio into a desktop widget or TUI clone:
+v4.9 focuses on reviewable evidence, not only metering, and uses npm one-command launch, Source Health, a small CLI bridge, quota profiles, and statusline integrations to close coverage and live-entry gaps without turning Token Studio into a desktop widget or TUI clone:
 
+- **Evidence Autopilot**: on `/review`, generate high-confidence attribution, project aliases, output candidates, and model-strategy samples without calling an LLM, reading content, or overwriting manual labels.
+- **Git metadata output candidates**: reads only repo name, remote host, commit hash, and commit time; output links are written only when an HTTPS commit URL can be generated, with no diff or file-content reads.
 - **ROI Savings Simulator**: compares official-price model switching scenarios for exploration, testing, context prep, low-value, and abandoned work.
 - **ccusage JSON Import**: imports documented ccusage JSON output for broader structured usage coverage while recomputing costs with Token Studio official pricing.
 - **ccusage CLI Bridge UX**: the Dashboard only generates copyable local commands; the browser never runs external scanners.
-- **Source Health Center**: shows native stable, experimental, detected-only, and ccusage import-bridge status, recent usage, token-field trust, and privacy boundaries without exposing full local paths.
+- **Source Health Center**: shows native stable, experimental, detected-only, and ccusage import-bridge status, recent usage, token-field trust, recommended import path, and privacy boundaries without exposing full local paths.
 - **Collection Coverage Gate**: run `token-studio coverage` before real import/apply to verify whether Claude/Codex have event-level history and whether Cursor is only detected without reliable token fields.
 - **Import / Budget Wizard**: paste or upload ccusage JSON in the Dashboard, dry-run first, inspect shape/session/event counts, unsafe fields, and unpriced models, then explicitly apply to SQLite.
 - **Quota Profiles v2**: supports rolling/fixed custom guardrail windows, reset anchors, warning thresholds, burn projection, reset countdown, and near/over/exceeded warnings on `/live`.

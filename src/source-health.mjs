@@ -57,6 +57,7 @@ export function buildSourceHealth({
       auditRecommended: Boolean(collector.auditRecommended),
       dataFields: collector.dataFields || [],
       workflow: workflowFor(collector),
+      recommendedImport: recommendedImportFor(collector),
       commandHint: commandHintFor(collector),
       matchedSources: matchedKeys,
       dailyRows: stats.dailyRows,
@@ -163,6 +164,22 @@ function workflowFor(collector) {
   if (collector.supportStatus === 'experimental') return 'Run collector audit first; only explicit token fields are eligible.';
   if (collector.supportStatus === 'import-only') return 'Import saved ccusage JSON or run explicit ccusage CLI bridge from terminal.';
   return 'Presence detection only; no usage rows are written.';
+}
+
+function recommendedImportFor(collector) {
+  if (collector.supportStatus === 'stable') {
+    return '优先用 Token Studio 原生采集；如果历史缺口较大，再用 ccusage JSON 做交叉补充。';
+  }
+  if (collector.supportStatus === 'experimental') {
+    return '先运行 audit，只在发现可靠 token 字段后采集；否则建议走 ccusage bridge。';
+  }
+  if (collector.supportStatus === 'import-only') {
+    return '用 ccusage CLI 或保存的 JSON 导入结构化 token，不采用第三方 cost 字段。';
+  }
+  if (collector.detected) {
+    return '已检测到工具痕迹，但没有可靠 token 字段；建议用 ccusage bridge 导入结构化 JSON。';
+  }
+  return '未检测到本机数据；需要使用该工具后再采集，或通过 ccusage bridge 导入。';
 }
 
 function commandHintFor(collector) {

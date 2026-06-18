@@ -52,11 +52,13 @@ test('source health summarizes coverage without exposing local paths', () => {
   assert.equal(codex.health, 'has-data');
   assert.equal(codex.sessions, 2);
   assert.equal(codex.detectedRootCount, 1);
+  assert.match(codex.recommendedImport, /原生采集/);
   assert.equal(JSON.stringify(codex).includes('sample-codex-root'), false);
 
   const ccusage = rows.find(row => row.id === 'ccusage');
   assert.equal(ccusage.coverageTier, 'ccusage import-bridge');
   assert.equal(ccusage.tokenEvents, 3);
   assert.equal(ccusage.lastRunStatus, 'ok');
+  assert.match(ccusage.recommendedImport, /ccusage/);
   assert.match(ccusage.commandHint, /npx token-studio import-usage/);
 });

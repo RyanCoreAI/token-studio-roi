@@ -61,6 +61,10 @@ import { buildLiveSnapshot } from './live.mjs';
 import { applyCcusageImport, parseCcusageJsonText, planCcusageImport } from './ccusage-import.mjs';
 import { buildSourceHealth } from './source-health.mjs';
 import { buildProjectCoverage, buildReviewWorkflow } from './project-coverage.mjs';
+import {
+  applyEvidenceSuggestions,
+  buildEvidenceAutopilotPlan
+} from './evidence-autopilot.mjs';
 
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || process.env.BIND_HOST || '127.0.0.1';
@@ -332,6 +336,14 @@ async function handleApi(req, url, res) {
   if (url.pathname === '/api/source-health' && req.method === 'GET') {
     if (!validateLocalRead(req, res, '来源健康接口')) return;
     sendJson(res, { sources: sourceHealth() });
+    return;
+  }
+  if (url.pathname === '/api/evidence-suggestions' && req.method === 'GET') {
+    handleEvidenceSuggestions(req, url, res);
+    return;
+  }
+  if (url.pathname === '/api/evidence-suggestions/apply' && req.method === 'POST') {
+    handleEvidenceSuggestionsApply(req, res);
     return;
   }
   if (url.pathname === '/api/collection-coverage' && req.method === 'GET') {
@@ -613,6 +625,45 @@ function handleAutoAttributionSuggestions(req, url, res) {
   const { sessions, projectAliasRules } = buildAutoAttributionContext();
   const plan = buildAutoAttributionPlan({ sessions, projectAliasRules, threshold });
   sendJson(res, { ok: true, plan });
+}
+
+function handleEvidenceSuggestions(req, url, res) {
+  if (!validateLocalRead(req, res, '复盘证据建议接口')) return;
+
+  try {
+    const { sessions, projectAliasRules } = buildAutoAttributionContext();
+    const plan = buildEvidenceAutopilotPlan({
+      sessions,
+      projectAliasRules,
+      period: url.searchParams.get('period') || 'month',
+      threshold: parseThreshold(url.searchParams.get('threshold'))
+    });
+    sendJson(res, { ok: true, plan });
+  } catch (error) {
+    sendJson(res, { error: error.message }, 400);
+  }
+}
+
+async function handleEvidenceSuggestionsApply(req, res) {
+  if (!validateLocalJsonWrite(req, res, '复盘证据建议接口')) return;
+
+  try {
+    const payload = await readJson(req, 256 * 1024);
+    const { sessions, projectAliasRules } = buildAutoAttributionContext();
+    const plan = buildEvidenceAutopilotPlan({
+      sessions,
+      projectAliasRules,
+      period: payload.period || 'month',
+      threshold: parseThreshold(payload.threshold)
+    });
+    const requested = suggestionIdSet(payload.suggestionIds || payload.suggestions);
+    const hasApplicable = plan.suggestions.some(item => requested.has(item.suggestionId) && item.canApply);
+    const backup = hasApplicable ? createDbBackup({ reason: 'evidence-autopilot' }) : null;
+    const result = applyEvidenceSuggestions(db, plan, payload);
+    sendJson(res, { ok: true, ...result, backup, plan });
+  } catch (error) {
+    sendJson(res, { error: error.message }, 400);
+  }
 }
 
 async function handleAutoAttributionApply(req, res) {
@@ -1410,6 +1461,11 @@ function parseThreshold(value) {
 function identitySet(rows) {
   if (!Array.isArray(rows) || !rows.length) return null;
   return new Set(rows.map(identityKey));
+}
+
+function suggestionIdSet(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  return new Set(list.map(row => typeof row === 'string' ? row : row?.suggestionId).filter(Boolean));
 }
 
 function identityKey(row = {}) {
