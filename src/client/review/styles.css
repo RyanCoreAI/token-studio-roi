@@ -995,6 +995,193 @@ section.story:last-of-type  { padding-bottom: 56px; }
   font-weight: 600;
 }
 
+/* ─── Evidence flywheel ───────────────────────────────────── */
+
+.flywheel-section {
+  padding-top: 48px;
+}
+
+.flywheel-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 18px;
+  align-items: center;
+  padding: 22px 24px;
+  border: 1px solid var(--rule-2);
+  border-radius: 14px;
+  background: var(--paper);
+  margin-bottom: 14px;
+}
+
+.flywheel-hero span,
+.flywheel-step span,
+.flywheel-next span,
+.flywheel-queue-head span {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.flywheel-hero strong {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--serif);
+  font-size: 52px;
+  line-height: 1;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.flywheel-hero p,
+.flywheel-step p,
+.flywheel-step b,
+.flywheel-queue-row p,
+.flywheel-queue-empty {
+  margin: 6px 0 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.flywheel-meter {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-2);
+}
+
+.flywheel-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--indigo));
+}
+
+.flywheel-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.flywheel-step {
+  display: grid;
+  align-content: start;
+  min-height: 154px;
+  padding: 16px;
+  border: 1px solid var(--rule-2);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.flywheel-step.done {
+  background: color-mix(in oklab, var(--good), var(--paper) 93%);
+}
+
+.flywheel-step.todo {
+  background: color-mix(in oklab, var(--amber), var(--paper) 94%);
+}
+
+.flywheel-step strong,
+.flywheel-next strong,
+.flywheel-queue-head strong,
+.flywheel-queue-row strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.flywheel-step b {
+  font-weight: 600;
+}
+
+.flywheel-step > div {
+  align-self: end;
+  height: 7px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-2);
+}
+
+.flywheel-step > div i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--indigo));
+}
+
+.flywheel-next {
+  padding: 16px;
+  border: 1px solid var(--rule-2);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--indigo), var(--paper) 96%);
+  margin-bottom: 14px;
+}
+
+.flywheel-queues {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.flywheel-queue {
+  border: 1px solid var(--rule-2);
+  border-radius: 12px;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.flywheel-queue-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--rule-2);
+}
+
+.flywheel-queue-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-top: 1px solid var(--rule-2);
+}
+
+.flywheel-queue-row:first-of-type {
+  border-top: 0;
+}
+
+.flywheel-queue-row > span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--paper-2);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.flywheel-queue-row b {
+  color: var(--ink);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.flywheel-queue-empty {
+  padding: 14px;
+}
+
 .evidence-autopilot-panel {
   display: grid;
   gap: 12px;
@@ -2712,6 +2899,14 @@ section.story:last-of-type  { padding-bottom: 56px; }
   .evidence-grid { grid-template-columns: 1fr; }
   .evidence-gap-row { grid-template-columns: 1fr; }
   .evidence-gap-row b { white-space: normal; }
+  .flywheel-hero { grid-template-columns: 1fr; }
+  .flywheel-steps { grid-template-columns: 1fr; }
+  .flywheel-queues { grid-template-columns: 1fr; }
+  .flywheel-queue-row { grid-template-columns: 30px minmax(0, 1fr); }
+  .flywheel-queue-row b {
+    grid-column: 2;
+    white-space: normal;
+  }
   .closure-gaps-head { align-items: flex-start; flex-direction: column; gap: 4px; }
   .closure-gap-row { grid-template-columns: 1fr; }
   .closure-gap-rank { width: 100%; justify-content: start; padding-left: 9px; }

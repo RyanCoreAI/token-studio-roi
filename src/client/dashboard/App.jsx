@@ -904,6 +904,7 @@ function Dashboard({
         onOpenImportBudget={() => setImportBudgetOpen(true)} />
       <SourceHealthPanel
         rows={M.meta?.sourceHealth || []}
+        coverageBridge={M.meta?.coverageBridge}
         onOpenImportBudget={() => setImportBudgetOpen(true)} />
 
       <div className="grid">
@@ -1140,27 +1141,43 @@ function FirstRunPanel({ state, onOpenImportBudget }) {
   );
 }
 
-function SourceHealthPanel({ rows = [], onOpenImportBudget }) {
-  if (!rows.length) return null;
+function SourceHealthPanel({ rows = [], coverageBridge = null, onOpenImportBudget }) {
+  const bridgeRows = coverageBridge?.rows || [];
+  if (!rows.length && !bridgeRows.length) return null;
   const groups = {
-    stable: rows.filter(row => row.supportStatus === 'stable').length,
-    experimental: rows.filter(row => row.supportStatus === 'experimental').length,
-    importOnly: rows.filter(row => row.supportStatus === 'import-only').length,
-    detectedOnly: rows.filter(row => row.supportStatus === 'detected-only').length
+    nativeTrusted: coverageBridge?.summary?.nativeTrusted ?? rows.filter(row => row.supportStatus === 'stable').length,
+    importable: coverageBridge?.summary?.importable ?? rows.filter(row => row.supportStatus === 'import-only').length,
+    detectedOnly: coverageBridge?.summary?.detectedOnly ?? rows.filter(row => row.detected || row.supportStatus === 'detected-only' || row.supportStatus === 'experimental').length,
+    unsupported: coverageBridge?.summary?.unsupported ?? rows.filter(row => !row.detected && row.supportStatus !== 'stable' && row.supportStatus !== 'import-only').length
   };
+  const bridgeById = new Map(bridgeRows.map(row => [row.id, row]));
   const activeRows = rows.filter(row => row.detected || row.sessions || row.tokenEvents || row.dailyRows || row.supportStatus === 'import-only');
-  const visibleRows = [
+  const visibleRows = (bridgeRows.length ? bridgeRows.map(row => ({
+    ...(rows.find(source => source.id === row.id) || {}),
+    ...row,
+    bridgeStatus: row.status,
+    bridgeStatusLabel: row.statusLabel
+  })) : [
     ...activeRows,
     ...rows.filter(row => !activeRows.includes(row)).slice(0, Math.max(0, 8 - activeRows.length))
-  ].slice(0, 10);
+  ]).slice(0, 10).map(row => {
+    const bridge = bridgeById.get(row.id) || row;
+    return {
+      ...row,
+      bridgeStatus: bridge.status || bridge.bridgeStatus || supportStatusToBridgeStatus(row),
+      bridgeStatusLabel: bridge.statusLabel || bridge.bridgeStatusLabel || bridgeStatusLabel(supportStatusToBridgeStatus(row)),
+      recommendedAction: bridge.recommendedAction || row.recommendedImport || sourceHealthStatusLabel(row),
+      privacy: bridge.privacy || (row.readsConversationContent ? '可能读取内容' : '不读取正文')
+    };
+  });
 
   return (
-    <section className="source-health-panel" aria-label="工具来源覆盖">
+    <section className="source-health-panel" aria-label="Coverage Bridge Center">
       <div className="source-health-head">
         <div>
-          <div className="eyebrow">工具来源覆盖</div>
-          <h2>这里只说明工具支持状态，不代表你的项目覆盖率</h2>
-          <p>项目覆盖看上面的“项目覆盖与归因进度”。这里仅用于安装、导入和排障：说明哪些工具可原生采集、可导入或仅检测；不读取正文，也不暴露本机完整路径。</p>
+          <div className="eyebrow">Coverage Bridge Center</div>
+          <h2>覆盖方式要分清：原生可信、ccusage 可导入、仅检测到</h2>
+          <p>这里解释每个工具为什么有或没有 token 数据。只有“原生可信采集”和成功导入的结构化 JSON 才算用量覆盖；“仅检测到”不会伪造成 token。</p>
         </div>
         <div className="source-health-actions">
           <button className="btn btn-primary" onClick={onOpenImportBudget}>生成 ccusage 命令</button>
@@ -1168,21 +1185,21 @@ function SourceHealthPanel({ rows = [], onOpenImportBudget }) {
         </div>
       </div>
       <div className="source-health-stats">
-        <SourceHealthStat label="原生稳定" value={groups.stable} />
-        <SourceHealthStat label="实验支持" value={groups.experimental} />
-        <SourceHealthStat label="导入桥" value={groups.importOnly} />
-        <SourceHealthStat label="仅检测" value={groups.detectedOnly} />
+        <SourceHealthStat label="原生可信" value={groups.nativeTrusted} />
+        <SourceHealthStat label="ccusage 可导入" value={groups.importable} />
+        <SourceHealthStat label="仅检测到" value={groups.detectedOnly} />
+        <SourceHealthStat label="无 token 字段" value={groups.unsupported} />
       </div>
       <div className="source-health-grid">
         {visibleRows.map(row => (
-          <article key={row.id} className={`source-health-card status-${row.supportStatus} health-${row.health}`}>
+          <article key={row.id} className={`source-health-card status-${row.bridgeStatus || row.supportStatus} health-${row.health}`}>
             <div className="source-health-card-top">
               <strong>{sourceHealthLabel(row)}</strong>
-              <span>{sourceTierLabel(row)}</span>
+              <span>{row.bridgeStatusLabel || sourceTierLabel(row)}</span>
             </div>
             <div className="source-health-card-meta">
               <span>{row.detected ? '已检测到' : '未检测到'}</span>
-              <span>{row.readsConversationContent ? '可能读取内容' : '不读取正文'}</span>
+              <span>{row.privacy || (row.readsConversationContent ? '可能读取内容' : '不读取正文')}</span>
               <span>{tokenReliabilityLabel(row.tokenReliability)}</span>
             </div>
             <div className="source-health-card-counts">
@@ -1197,12 +1214,10 @@ function SourceHealthPanel({ rows = [], onOpenImportBudget }) {
               <span>{sourceHealthStatusLabel(row)}</span>
               {row.lastRunMessage && <small>{row.lastRunMessage}</small>}
             </div>
-            {row.recommendedImport && (
-              <div className="source-health-recommendation">
-                <span>推荐方式</span>
-                <p>{row.recommendedImport}</p>
-              </div>
-            )}
+            <div className="source-health-recommendation">
+              <span>推荐方式</span>
+              <p>{row.recommendedAction || row.recommendedImport || '先看 coverage，再决定是否原生采集或导入 ccusage JSON。'}</p>
+            </div>
             <code>{row.commandHint}</code>
           </article>
         ))}
@@ -1230,6 +1245,23 @@ function sourceTierLabel(row) {
   if (row.supportStatus === 'experimental') return '实验支持';
   if (row.supportStatus === 'import-only') return '导入桥';
   return '仅检测';
+}
+
+function supportStatusToBridgeStatus(row) {
+  if (row.supportStatus === 'stable' && row.tokenReliability === 'native-token-fields') return 'native-trusted';
+  if (row.supportStatus === 'import-only' || row.id === 'ccusage') return 'ccusage-importable';
+  if (row.detected || row.supportStatus === 'experimental' || row.supportStatus === 'detected-only') return 'detected-only';
+  return 'unsupported';
+}
+
+function bridgeStatusLabel(status) {
+  const labels = {
+    'native-trusted': '原生可信采集',
+    'ccusage-importable': 'ccusage 可导入',
+    'detected-only': '仅检测到',
+    unsupported: '不支持 / 无 token 字段'
+  };
+  return labels[status] || '待确认';
 }
 
 function tokenReliabilityLabel(value) {

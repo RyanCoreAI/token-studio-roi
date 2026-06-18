@@ -23,11 +23,61 @@ test('buildMarkdownReviewReport renders the fixed weekly review structure', () =
 
   assert.match(report, /^# Token Studio Weekly Review/);
   assert.match(report, /## 1\. 本期总览/);
-  assert.match(report, /## 8\. 本周行动状态/);
-  assert.match(report, /## 10\. 口径说明/);
-  assert.match(report, /## 6\. 节省模拟/);
+  assert.match(report, /## 2\. Coverage Bridge/);
+  assert.match(report, /## 3\. Evidence Flywheel/);
+  assert.match(report, /## 10\. 本周行动状态/);
+  assert.match(report, /## 12\. 口径说明/);
+  assert.match(report, /## 8\. 节省模拟/);
   assert.match(report, /官方公开 token 单价换算，不是供应商账单/);
   assert.match(report, /不读取、不导出对话正文/);
+});
+
+test('buildMarkdownReviewReport includes coverage bridge and evidence flywheel summaries', () => {
+  const report = buildMarkdownReviewReport({
+    period,
+    daily: [],
+    sessions: [],
+    coverageBridge: {
+      summary: {
+        nativeTrusted: 2,
+        importable: 1,
+        detectedOnly: 3,
+        unsupported: 4
+      },
+      rows: [{
+        label: 'Claude Code',
+        statusLabel: '原生可信采集',
+        detected: true,
+        sessions: 2,
+        totalTokens: 1000,
+        recommendedAction: '已有原生结构化 token 数据'
+      }]
+    },
+    evidenceFlywheel: {
+      score: 50,
+      completedSteps: 3,
+      totalSteps: 6,
+      nextAction: '先确认最高成本草稿',
+      totals: {
+        autoEvidenceCount: 1,
+        manualEvidenceCount: 0,
+        outputEvidenceCount: 0,
+        strategyEvidenceCount: 1
+      },
+      steps: [{
+        label: '已有真实 token',
+        complete: true,
+        current: 1,
+        target: 1,
+        action: '已具备'
+      }]
+    }
+  });
+
+  assert.match(report, /原生可信采集 \| 2/);
+  assert.match(report, /Claude Code \| 原生可信采集/);
+  assert.match(report, /飞轮进度 \| 50%/);
+  assert.match(report, /下一步：先确认最高成本草稿/);
 });
 
 test('buildMarkdownReviewReport includes advisor action workflow status', () => {

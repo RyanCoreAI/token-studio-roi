@@ -61,6 +61,8 @@ import { buildLiveSnapshot } from './live.mjs';
 import { applyCcusageImport, parseCcusageJsonText, planCcusageImport } from './ccusage-import.mjs';
 import { buildSourceHealth } from './source-health.mjs';
 import { buildProjectCoverage, buildReviewWorkflow } from './project-coverage.mjs';
+import { buildCoverageBridge } from './coverage-bridge.mjs';
+import { buildEvidenceFlywheel } from './evidence-flywheel.mjs';
 import {
   applyEvidenceSuggestions,
   buildEvidenceAutopilotPlan
@@ -291,6 +293,14 @@ async function handleApi(req, url, res) {
     const advisorActions = listAdvisorActions(db);
     const tokenEvents = listTokenEvents(db, { limit: 1000 });
     const runtime = runtimeMetadata();
+    const sourceHealthRows = sourceHealth();
+    const coverageBridge = buildCoverageBridge({ sourceHealth: sourceHealthRows });
+    const evidenceFlywheel = buildEvidenceFlywheel({
+      sessions: pricedSessions,
+      workItems,
+      advisorActions,
+      coverageBridge
+    });
 
     sendJson(res, {
       meta: {
@@ -309,7 +319,9 @@ async function handleApi(req, url, res) {
         dataMode: runtime.dataMode,
         runtime,
         officialPricing: officialPricingMetadata(daily),
-        sourceHealth: sourceHealth(),
+        sourceHealth: sourceHealthRows,
+        coverageBridge,
+        evidenceFlywheel,
         projectCoverage: buildProjectCoverage({ sessions: pricedSessions }),
         reviewWorkflow: buildReviewWorkflow({ sessions: pricedSessions, advisorActions })
       },
@@ -336,6 +348,16 @@ async function handleApi(req, url, res) {
   if (url.pathname === '/api/source-health' && req.method === 'GET') {
     if (!validateLocalRead(req, res, '来源健康接口')) return;
     sendJson(res, { sources: sourceHealth() });
+    return;
+  }
+  if (url.pathname === '/api/coverage-bridge' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '覆盖桥接口')) return;
+    const rows = sourceHealth();
+    sendJson(res, { ok: true, coverageBridge: buildCoverageBridge({ sourceHealth: rows }) });
+    return;
+  }
+  if (url.pathname === '/api/evidence-flywheel' && req.method === 'GET') {
+    handleEvidenceFlywheel(req, url, res);
     return;
   }
   if (url.pathname === '/api/evidence-suggestions' && req.method === 'GET') {
@@ -639,6 +661,33 @@ function handleEvidenceSuggestions(req, url, res) {
       threshold: parseThreshold(url.searchParams.get('threshold'))
     });
     sendJson(res, { ok: true, plan });
+  } catch (error) {
+    sendJson(res, { error: error.message }, 400);
+  }
+}
+
+function handleEvidenceFlywheel(req, url, res) {
+  if (!validateLocalRead(req, res, '证据飞轮接口')) return;
+
+  try {
+    const { sessions, projectAliasRules } = buildAutoAttributionContext();
+    const sourceHealthRows = sourceHealth();
+    const coverageBridge = buildCoverageBridge({ sourceHealth: sourceHealthRows });
+    const evidencePlan = buildEvidenceAutopilotPlan({
+      sessions,
+      projectAliasRules,
+      period: url.searchParams.get('period') || 'month',
+      threshold: parseThreshold(url.searchParams.get('threshold')),
+      scanGit: false
+    });
+    const flywheel = buildEvidenceFlywheel({
+      sessions,
+      workItems: listWorkItems(db),
+      advisorActions: listAdvisorActions(db),
+      evidencePlan,
+      coverageBridge
+    });
+    sendJson(res, { ok: true, flywheel, coverageBridge });
   } catch (error) {
     sendJson(res, { error: error.message }, 400);
   }

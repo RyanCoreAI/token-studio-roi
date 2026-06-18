@@ -148,6 +148,89 @@ function ReadableGate({ label, value, note, done }) {
   );
 }
 
+function EvidenceFlywheelSection({
+  flywheel,
+  autopilotState,
+  onRunAutopilot,
+  onApplyEvidenceSuggestion,
+  onDismissEvidenceSuggestion
+}) {
+  if (!flywheel) return null;
+  const steps = flywheel.steps || [];
+  const queues = flywheel.queues || {};
+  return (
+    <section className="story flywheel-section">
+      <div className="section-label">02 · 证据飞轮</div>
+      <h2 className="section-title">真实 token 怎么变成可复盘证据</h2>
+      <p className="section-sub">先拿到可信 token，再识别项目、生成自动证据、确认产出，最后才有节省模拟和模型策略。这里不读取对话正文，也不把自动推断包装成人工事实。</p>
+
+      <div className="flywheel-hero">
+        <div>
+          <span>Evidence Flywheel</span>
+          <strong>{flywheel.score || 0}%</strong>
+          <p>{flywheel.completedSteps || 0} / {flywheel.totalSteps || steps.length || 0} 步可用 · {flywheel.totals?.sessionCount || 0} 个 session · {U.compactCN(flywheel.totals?.totalTokens || 0)} tokens</p>
+        </div>
+        <div className="flywheel-meter" aria-hidden="true">
+          <span style={{width: `${Math.max(0, Math.min(100, flywheel.score || 0))}%`}}/>
+        </div>
+      </div>
+
+      <div className="flywheel-steps">
+        {steps.map(step => (
+          <article key={step.id} className={`flywheel-step ${step.complete ? 'done' : 'todo'}`}>
+            <span>{step.complete ? '已具备' : '待补齐'}</span>
+            <strong>{step.label}</strong>
+            <p>{step.current} / {step.target}</p>
+            {!step.complete && <b>{step.action}</b>}
+            <div aria-hidden="true"><i style={{width: `${Math.round((step.share || 0) * 100)}%`}}/></div>
+          </article>
+        ))}
+      </div>
+
+      <div className="flywheel-next">
+        <span>下一步动作</span>
+        <strong>{flywheel.nextAction || '抽查最高成本自动证据。'}</strong>
+      </div>
+
+      <div className="flywheel-queues">
+        <FlywheelQueue title="最值得补的证据" rows={queues.highCostGaps || []} />
+        <FlywheelQueue title="产出链接候选" rows={queues.outputCandidates || []} />
+        <FlywheelQueue title="模型策略样本缺口" rows={queues.strategyCandidates || []} />
+      </div>
+
+      <EvidenceAutopilotPanel
+        state={autopilotState}
+        onRun={onRunAutopilot}
+        onApply={onApplyEvidenceSuggestion}
+        onDismiss={onDismissEvidenceSuggestion}
+      />
+    </section>
+  );
+}
+
+function FlywheelQueue({ title, rows = [] }) {
+  return (
+    <article className="flywheel-queue">
+      <div className="flywheel-queue-head">
+        <strong>{title}</strong>
+        <span>{rows.length} 条</span>
+      </div>
+      {rows.length ? rows.slice(0, 4).map((row, index) => (
+        <div key={`${row.source || ''}:${row.sessionId || ''}:${index}`} className="flywheel-queue-row">
+          <span>{String(index + 1).padStart(2, '0')}</span>
+          <div>
+            <strong>{row.project || '未识别项目'}</strong>
+            <p>{row.model || row.source || 'unknown'} · {Array.isArray(row.missing) && row.missing.length ? `缺 ${row.missing.join('、')}` : row.sessionId || '待确认'}</p>
+          </div>
+          <b>{row.costUSD > 0 ? U.fmtUS.format(row.costUSD) : U.compactCN(row.totalTokens || 0)}</b>
+        </div>
+      )) : (
+        <p className="flywheel-queue-empty">暂无明显缺口；继续运行 Evidence Autopilot 或补产出链接。</p>
+      )}
+    </article>
+  );
+}
+
 function RoiEvidenceSection({
   evidence,
   zeroState,
@@ -1117,7 +1200,7 @@ function InsightsSection({ insights }) {
   );
 }
 
-export { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection, ReviewTrustBanner };
+export { ToolsSection, EfficiencySection, ClosureProgressSection, EvidenceFlywheelSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection, ReviewTrustBanner };
 
 function EvidenceAutopilotPanel({ state, onRun, onApply, onDismiss }) {
   const dismissed = new Set(state?.dismissedIds || []);

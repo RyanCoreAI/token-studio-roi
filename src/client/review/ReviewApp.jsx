@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { U } from '../shared/utils.js';
 import { RU } from './utils.js';
 import { HeroSection, ProjectSection, CalendarSection } from './sections-1.jsx';
-import { ToolsSection, EfficiencySection, ClosureProgressSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection, ReviewTrustBanner } from './sections-2.jsx';
+import { ToolsSection, EfficiencySection, ClosureProgressSection, EvidenceFlywheelSection, RoiEvidenceSection, SavingsSimulatorSection, RoiAdvisorSection, AdvisorActionSummarySection, ModelStrategySection, InsightsSection, ReviewTrustBanner } from './sections-2.jsx';
 import { buildRoiAdvisor } from './roi-advisor.js';
 import { buildMarkdownReviewReport, buildReviewReportFilename } from './markdown-report.js';
 import { buildModelStrategy } from './model-strategy.js';
@@ -23,6 +23,23 @@ function formatApiConnectionError(error, action = '请求') {
     return `${action}失败：本地 API 服务没有连上。请关闭旧页面，重新运行 npx token-studio，并打开终端输出的最新本地 URL。`;
   }
   return message || `${action}失败`;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return true;
 }
 
 export function ReviewApp() {
@@ -182,9 +199,22 @@ function ReviewDashboard({ rawData, onReloadData }) {
   const savingsEmptyReason = useMemo(() =>
     buildSavingsEmptyReason({ simulation: savingsSimulation, sessions })
   , [savingsSimulation, sessions]);
+  const evidenceFlywheel = rawData.meta?.evidenceFlywheel || null;
+  const coverageBridge = rawData.meta?.coverageBridge || null;
   const markdownReport = useMemo(() =>
-    buildMarkdownReviewReport({ period, daily, sessions, workItems: rawData.workItems || [], roiAdvice, insights, savingsSimulation, advisorActions })
-  , [period, daily, sessions, rawData.workItems, roiAdvice, insights, savingsSimulation, advisorActions]);
+    buildMarkdownReviewReport({
+      period,
+      daily,
+      sessions,
+      workItems: rawData.workItems || [],
+      roiAdvice,
+      insights,
+      savingsSimulation,
+      advisorActions,
+      coverageBridge,
+      evidenceFlywheel
+    })
+  , [period, daily, sessions, rawData.workItems, roiAdvice, insights, savingsSimulation, advisorActions, coverageBridge, evidenceFlywheel]);
 
   useEffect(() => {
     setAdvisorActions(rawData.advisorActions || []);
@@ -403,6 +433,23 @@ function ReviewDashboard({ rawData, onReloadData }) {
     );
   };
 
+  const copyBlogMaterial = () => copyText(
+    [
+      `Token Studio ROI ${period.pretty || ''} 复盘：本期记录 ${sessions.length} 个 session、${U.compactCN(totals.total)} tokens，官方价换算 ${U.fmtUS.format(totals.cost)}。`,
+      `Coverage Bridge 显示 ${coverageBridge?.summary?.nativeTrusted || 0} 个来源可原生可信采集、${coverageBridge?.summary?.importable || 0} 个来源可通过 ccusage 导入；detected-only 不会被伪造成用量。`,
+      `Evidence Flywheel 当前 ${evidenceFlywheel?.completedSteps || 0}/${evidenceFlywheel?.totalSteps || 6} 步完成，下一步是：${evidenceFlywheel?.nextAction || '继续补齐项目、任务、产出和模型策略证据'}。`,
+      '所有成本都是官方公开 token 价格换算，不是供应商账单；报告不读取 prompt、response、transcript、diff 或完整路径。'
+    ].join('\n\n')
+  );
+
+  const copyResumeMaterial = () => copyText(
+    [
+      '- Built Token Studio ROI, a local-first AI coding ROI review tool with event-level token collection, official-price cost conversion, privacy gates, and evidence-based review workflows.',
+      '- Designed Coverage Bridge to distinguish native trusted collectors, ccusage import paths, detected-only tools, and unsupported sources without fabricating token usage.',
+      '- Added Evidence Flywheel and rule-based Autopilot to turn local structured metadata into project attribution, output evidence, model policy samples, and weekly review actions without reading conversation content.'
+    ].join('\n')
+  );
+
   const reviewPages = useMemo(() => [
     {
       id: 'overview',
@@ -425,6 +472,18 @@ function ReviewDashboard({ rawData, onReloadData }) {
         projectCoverage={rawData.meta?.projectCoverage}
         lazyState={lazyAttributionState}
         onLazyAttribution={applyLazyAttribution}
+      />
+    },
+    {
+      id: 'flywheel',
+      label: '证据飞轮',
+      className: 'page',
+      content: <EvidenceFlywheelSection
+        flywheel={evidenceFlywheel}
+        autopilotState={evidenceAutopilotState}
+        onRunAutopilot={runEvidenceAutopilot}
+        onApplyEvidenceSuggestion={applyEvidenceSuggestion}
+        onDismissEvidenceSuggestion={dismissEvidenceSuggestion}
       />
     },
     {
@@ -527,7 +586,7 @@ function ReviewDashboard({ rawData, onReloadData }) {
       className: 'page',
       content: <InsightsSection insights={insights}/>
     }
-  ], [period, totals, prevTotals, heroStats, trustState, roiEvidence, evidenceZeroState, lazyAttributionState, applyLazyAttribution, evidenceAutopilotState, runEvidenceAutopilot, applyEvidenceSuggestion, dismissEvidenceSuggestion, closureProgress, rawData.meta, daily, roiAdvice, savingsSimulation, savingsEmptyReason, modelStrategy, insights, actionsByRule, periodAdvisorActions, addAdvisorAction, setAdvisorActionStatus]);
+  ], [period, totals, prevTotals, heroStats, trustState, evidenceFlywheel, roiEvidence, evidenceZeroState, lazyAttributionState, applyLazyAttribution, evidenceAutopilotState, runEvidenceAutopilot, applyEvidenceSuggestion, dismissEvidenceSuggestion, closureProgress, rawData.meta, daily, roiAdvice, savingsSimulation, savingsEmptyReason, modelStrategy, insights, actionsByRule, periodAdvisorActions, addAdvisorAction, setAdvisorActionStatus]);
 
   const goToReviewPage = useCallback((index) => {
     const nextIndex = Math.max(0, Math.min(reviewPages.length - 1, index));
@@ -601,6 +660,12 @@ function ReviewDashboard({ rawData, onReloadData }) {
                 <path d="M6.5 1.5v6M4 5l2.5 2.5L9 5M2.5 10.5h8" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               导出报告
+            </button>
+            <button className="nav-btn" onClick={copyBlogMaterial}>
+              复制博客素材
+            </button>
+            <button className="nav-btn" onClick={copyResumeMaterial}>
+              复制简历描述
             </button>
             <button className="nav-btn" onClick={() => window.print()}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">

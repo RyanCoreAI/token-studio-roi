@@ -155,6 +155,20 @@ export function buildLiveGuardrails(snapshot = {}, config = {}) {
     }
   }
 
+  const heavyModels = (snapshot.byModel || [])
+    .filter(row => isHeavyModel(row.key) && number(row.totalTokens) > 0);
+  const budgetPressure = burnRate > guardrails.tokenBudgetPerHour
+    || (snapshot.budgetWindows || []).some(window => ['near-limit', 'over-pace', 'exceeded'].includes(window.status));
+  if (budgetPressure && heavyModels.length) {
+    warnings.push({
+      type: 'heavy-model-stop-today',
+      level: (snapshot.budgetWindows || []).some(window => ['over-pace', 'exceeded'].includes(window.status)) ? 'high' : 'medium',
+      message: '今天先暂停重模型',
+      evidence: `${heavyModels.slice(0, 3).map(row => row.key).join('、')} 最近窗口合计 ${formatInt(heavyModels.reduce((sum, row) => sum + number(row.totalTokens), 0))} tokens`,
+      action: '测试、探索和上下文整理先切轻量/中模型；关键发布审查再恢复重模型。'
+    });
+  }
+
   return warnings;
 }
 
@@ -421,6 +435,11 @@ function isUnpricedModel(model) {
   if (!value || value === 'unknown') return false;
   const pricing = resolveOfficialPricing(value);
   return !pricing || !pricing.priced;
+}
+
+function isHeavyModel(model) {
+  const value = String(model || '').toLowerCase();
+  return value.includes('opus') || value.includes('gpt-5.5');
 }
 
 function formatInt(value) {

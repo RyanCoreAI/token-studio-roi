@@ -30,14 +30,16 @@ npx token-studio
 
 ## What Makes ROI Different?
 
-Token Studio ROI 的 v4.9 重点不是再堆一个 token meter，而是把统计结果转成可执行复盘证据，并用 npm 一键启动、Source Health、CLI bridge、quota profiles 和 statusline integration 补齐竞品的覆盖面和实时入口：
+Token Studio ROI 的 v5 重点不是再堆一个 token meter，而是把统计结果转成可执行复盘证据，并用 Coverage Bridge + Evidence Flywheel 把“有没有数据、数据从哪来、能不能支撑 ROI 判断”讲清楚。本阶段先在源码本地收口，npm 发布另行决定。
 
+- **Coverage Bridge Center**：把来源分成原生可信采集、ccusage 可导入、仅检测到、不支持/无 token 字段，避免把目录检测误认为真实覆盖。
+- **Evidence Flywheel**：在 `/review` 串起真实 token、项目识别、自动证据、待确认草稿、产出链接和模型策略样本，让 0 分页面变成可执行队列。
 - **Evidence Autopilot**：在 `/review` 一键生成复盘证据，自动补高置信归因、项目别名、产出链接候选和模型策略样本；不调用 LLM，不读取正文，不覆盖人工标注。
 - **Git metadata output candidates**：只读取 repo 名、remote host、commit hash 和 commit 时间；只有能生成 HTTPS commit URL 时才写入产出链接，不读取 diff 或文件内容。
 - **ROI Savings Simulator**：模拟“探索、测试、上下文整理、低价值或废弃任务从重模型切到轻量/中模型”时，按官方公开 token 价格可能少花多少。
 - **ccusage JSON Import**：兼容 ccusage documented JSON output，借它的多源生态导入结构化 token 数据，但成本仍由 Token Studio 官方价函数重算。
 - **ccusage CLI Bridge UX**：Dashboard 只生成可复制命令，不从浏览器运行外部扫描器；真实 bridge 仍由用户在本地终端显式执行。
-- **Source Health Center**：显示 native stable、experimental、detected-only、ccusage import-bridge 的状态、最近用量、token 字段可信度、推荐导入方式和隐私边界，不输出完整本机路径。
+- **Source Health / Coverage Bridge**：显示 native stable、experimental、detected-only、ccusage import-bridge 的状态、最近用量、token 字段可信度、推荐导入方式和隐私边界，不输出完整本机路径。
 - **Collection Coverage Gate**：真实采集前先跑 `token-studio coverage`，确认 Claude/Codex 是否有 event 级历史、Cursor 是否只有 detected-only，避免把目录检测误认为采集成功。
 - **Import / Budget Wizard**：在 Dashboard 里粘贴或上传 ccusage JSON，先 dry-run 看 shape、session/event 数、unsafe 字段和未定价模型，确认后才写 SQLite。
 - **Quota Profiles v2**：支持 rolling/fixed 自定义限额窗口、reset anchor、warning threshold，在 `/live` 看到 burn projection、reset countdown 和 near/over/exceeded warnings。

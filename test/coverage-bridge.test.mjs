@@ -1,0 +1,49 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { buildCoverageBridge } from '../src/coverage-bridge.mjs';
+
+test('coverage bridge separates native trusted, importable, detected-only and unsupported sources', () => {
+  const bridge = buildCoverageBridge({
+    sourceHealth: [
+      {
+        id: 'claude',
+        label: 'Claude Code',
+        supportStatus: 'stable',
+        tokenReliability: 'native-token-fields',
+        detected: true,
+        sessions: 3,
+        tokenEvents: 10,
+        totalTokens: 12_000
+      },
+      {
+        id: 'ccusage',
+        label: 'ccusage Import',
+        supportStatus: 'import-only',
+        tokenReliability: 'external-json-token-fields'
+      },
+      {
+        id: 'cursor',
+        label: 'Cursor',
+        supportStatus: 'experimental',
+        tokenReliability: 'explicit-token-fields-only',
+        detected: true
+      },
+      {
+        id: 'kiro',
+        label: 'Kiro',
+        supportStatus: 'unsupported',
+        tokenReliability: 'unknown-no-usage-import',
+        detected: false
+      }
+    ]
+  });
+
+  assert.equal(bridge.summary.nativeTrusted, 1);
+  assert.equal(bridge.summary.importable, 1);
+  assert.equal(bridge.summary.detectedOnly, 1);
+  assert.equal(bridge.summary.unsupported, 1);
+  assert.equal(bridge.summary.sourcesWithUsage, 1);
+  assert.equal(bridge.rows.find(row => row.id === 'claude').statusLabel, '原生可信采集');
+  assert.equal(bridge.rows.find(row => row.id === 'ccusage').statusLabel, 'ccusage 可导入');
+  assert.match(bridge.rows.find(row => row.id === 'cursor').recommendedAction, /不要把它当作已覆盖/);
+});

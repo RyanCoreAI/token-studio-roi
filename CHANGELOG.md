@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.0.0
+
+- Added Coverage Bridge Center metadata and UI so users can distinguish native trusted collection, ccusage import paths, detected-only tools, and unsupported/no-token-field sources.
+- Added `GET /api/coverage-bridge` and `GET /api/evidence-flywheel` as read-only derived APIs; they do not read prompt/response/transcript/diff content and do not expose full local paths.
+- Added Evidence Flywheel on `/review`, connecting real token data, project identification, automatic evidence, confirmation drafts, output links, and model-strategy samples into one review flow.
+- Upgraded Markdown review reports with Coverage Bridge and Evidence Flywheel sections plus copy-ready blog/resume material actions.
+- Added a live guardrail that recommends pausing heavy models for the day when custom budget pressure is active.
+- Local-only milestone: this version is not published to npm in this stage.
+
 ## 4.9.0
 
 - Added Evidence Autopilot on `/review`: a single action can generate high-confidence attribution, project aliases, output evidence suggestions, and model-strategy evidence without calling an LLM or reading prompt/response/transcript/diff content.

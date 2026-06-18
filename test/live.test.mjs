@@ -124,6 +124,34 @@ test('live snapshot builds budget windows and budget warnings', () => {
   assert.ok(snapshot.warnings.some(item => item.type === 'budget-exceeded'));
 });
 
+test('live guardrails suggest pausing heavy models when budget pressure is active', () => {
+  const snapshot = buildLiveSnapshot({
+    now: new Date('2026-06-17T02:15:00Z'),
+    windowMinutes: 15,
+    budgetProfiles: [{
+      id: 1,
+      source: 'Claude Code',
+      label: 'Claude 15m',
+      windowMinutes: 15,
+      tokenBudget: 10_000,
+      enabled: true
+    }],
+    tokenEvents: [{
+      eventId: 'heavy-budget',
+      device: 'demo',
+      source: 'Claude Code',
+      sessionId: 's1',
+      timestamp: '2026-06-17T02:10:00Z',
+      model: 'claude-opus-4-7',
+      inputTokens: 9_000,
+      outputTokens: 2_000
+    }]
+  });
+  const warning = snapshot.warnings.find(item => item.type === 'heavy-model-stop-today');
+  assert.ok(warning);
+  assert.match(warning.action, /轻量\/中模型/);
+});
+
 test('live snapshot warns when current pace will exceed custom budget', () => {
   const snapshot = buildLiveSnapshot({
     now: new Date('2026-06-17T02:15:00Z'),

@@ -18,6 +18,8 @@ export function buildMarkdownReviewReport({
   savingsSimulation = null,
   advisorActions = [],
   insights = [],
+  coverageBridge = null,
+  evidenceFlywheel = null,
   generatedAt = new Date()
 } = {}) {
   const totals = aggregateDaily(daily);
@@ -58,7 +60,63 @@ export function buildMarkdownReviewReport({
       ]
     ),
     '',
-    '## 2. 成本最高项目',
+    '## 2. Coverage Bridge',
+    '',
+    coverageBridge ? [
+      'Coverage Bridge 只说明来源覆盖方式，不把 detected-only 包装成真实 token 覆盖。',
+      '',
+      table(
+        ['状态', '数量'],
+        [
+          ['原生可信采集', formatInt(coverageBridge.summary?.nativeTrusted || 0)],
+          ['ccusage 可导入', formatInt(coverageBridge.summary?.importable || 0)],
+          ['仅检测到', formatInt(coverageBridge.summary?.detectedOnly || 0)],
+          ['不支持 / 无 token 字段', formatInt(coverageBridge.summary?.unsupported || 0)]
+        ]
+      ),
+      '',
+      coverageBridge.rows?.length ? table(
+        ['来源', '覆盖方式', '已检测', 'Sessions', 'Token', '推荐动作'],
+        coverageBridge.rows.slice(0, 10).map(row => [
+          row.label,
+          row.statusLabel,
+          row.detected ? '是' : '否',
+          formatInt(row.sessions || 0),
+          compactCN(row.totalTokens || 0),
+          row.recommendedAction
+        ])
+      ) : '暂无来源覆盖数据。'
+    ].join('\n') : '当前 API 没有返回 Coverage Bridge 数据。',
+    '',
+    '## 3. Evidence Flywheel',
+    '',
+    evidenceFlywheel ? [
+      table(
+        ['指标', '数值'],
+        [
+          ['飞轮进度', `${evidenceFlywheel.score || 0}%`],
+          ['完成步骤', `${evidenceFlywheel.completedSteps || 0}/${evidenceFlywheel.totalSteps || 0}`],
+          ['自动证据 session', formatInt(evidenceFlywheel.totals?.autoEvidenceCount || 0)],
+          ['人工确认 session', formatInt(evidenceFlywheel.totals?.manualEvidenceCount || 0)],
+          ['产出证据 session', formatInt(evidenceFlywheel.totals?.outputEvidenceCount || 0)],
+          ['模型策略样本 session', formatInt(evidenceFlywheel.totals?.strategyEvidenceCount || 0)]
+        ]
+      ),
+      '',
+      `下一步：${safeText(evidenceFlywheel.nextAction || '抽查最高成本自动证据。')}`,
+      '',
+      evidenceFlywheel.steps?.length ? table(
+        ['步骤', '状态', '进度', '建议动作'],
+        evidenceFlywheel.steps.map(step => [
+          step.label,
+          step.complete ? '已具备' : '待补齐',
+          `${step.current}/${step.target}`,
+          step.action
+        ])
+      ) : ''
+    ].join('\n') : '当前 API 没有返回 Evidence Flywheel 数据。',
+    '',
+    '## 4. 成本最高项目',
     '',
     projectRows.length ? table(
       ['项目', 'Sessions', 'Tokens', '官方价', '完成/发布占比', '风险占比'],
@@ -72,7 +130,7 @@ export function buildMarkdownReviewReport({
       ])
     ) : '本期没有项目数据。',
     '',
-    '## 3. 模型使用分布',
+    '## 5. 模型使用分布',
     '',
     modelRows.length ? table(
       ['模型', '来源', 'Tokens', '官方价', '占比'],
@@ -85,7 +143,7 @@ export function buildMarkdownReviewReport({
       ])
     ) : '本期没有模型数据。',
     '',
-    '## 4. 已完成 / 已发布产出',
+    '## 6. 已完成 / 已发布产出',
     '',
     outputRows.length ? table(
       ['状态', '类型', '标签', '项目', '链接'],
@@ -98,7 +156,7 @@ export function buildMarkdownReviewReport({
       ])
     ) : '本期没有已完成/已发布的产出链接。建议先给高价值 session 补 PR、commit、文章、部署、文档或截图链接。',
     '',
-    '## 5. 风险成本',
+    '## 7. 风险成本',
     '',
     riskRows.length ? table(
       ['风险类型', 'Sessions', 'Tokens', '官方价', '占比'],
@@ -127,7 +185,7 @@ export function buildMarkdownReviewReport({
       ])
     ) : '本期没有待补齐的高成本归因 session。',
     '',
-    '## 6. 节省模拟',
+    '## 8. 节省模拟',
     '',
     savingsSimulation?.suggestions?.length ? [
       '官方价换算节省模拟只用于比较模型策略，不是供应商账单。',
@@ -150,7 +208,7 @@ export function buildMarkdownReviewReport({
     '',
     savingsSimulation?.unpriced?.sessionCount ? `未纳入成本决策：${formatInt(savingsSimulation.unpriced.sessionCount)} 个 session、${compactCN(savingsSimulation.unpriced.totalTokens)} tokens 没有公开官方美元价，模型包括 ${safeText(savingsSimulation.unpriced.models.join('、') || 'unknown')}。` : '',
     '',
-    '## 7. ROI Advisor 建议',
+    '## 9. ROI Advisor 建议',
     '',
     roiAdvice.length ? roiAdvice.map((item, index) => [
       `### ${index + 1}. ${safeText(item.title)}`,
@@ -163,7 +221,7 @@ export function buildMarkdownReviewReport({
       `- 建议动作：${safeText(item.action)}`
     ].join('\n')).join('\n\n') : '本期没有触发 ROI Advisor 建议。',
     '',
-    '## 8. 本周行动状态',
+    '## 10. 本周行动状态',
     '',
     actionStatusRows.length ? table(
       ['状态', '分类', '建议', '行动'],
@@ -177,11 +235,11 @@ export function buildMarkdownReviewReport({
     '',
     '说明：完成行动只表示复盘流程状态；报告只展示行动前后同类 token / 官方价趋势，不证明真实因果节省。',
     '',
-    '## 9. 下周行动清单',
+    '## 11. 下周行动清单',
     '',
     actionItems.length ? actionItems.map(item => `- ${safeText(item)}`).join('\n') : '- 保持当前模型和上下文使用策略，继续补充真实产出链接。',
     '',
-    '## 10. 口径说明',
+    '## 12. 口径说明',
     '',
     '- 金额为官方公开 token 单价换算，不是供应商账单或财务对账结果。',
     '- 节省模拟使用当前 token 结构和已配置官方价模型做策略比较，不承诺真实账单节省。',
