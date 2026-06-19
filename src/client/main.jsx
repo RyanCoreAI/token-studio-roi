@@ -12,6 +12,10 @@ function Root() {
     document.title = 'Live Monitor · Token Studio ROI';
     return <LiveApp />;
   }
+  if (window.location.pathname === '/trust') {
+    document.title = 'Local Trust · Token Studio ROI';
+    return <App routeMode="trust" />;
+  }
 
   document.title = 'Token Studio ROI';
   return <App />;

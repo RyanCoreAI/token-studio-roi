@@ -35,8 +35,12 @@ test('buildLocalTrust marks verified event-level data as ROI-ready', () => {
 
   assert.equal(trust.conclusion.level, 'trusted');
   assert.equal(trust.conclusion.canUseForRoiReview, true);
+  assert.equal(trust.security.level, 'local-only');
+  assert.equal(trust.security.dashboardApiRemoteAccess, false);
   assert.equal(trust.reconciliation.status, 'ok');
   assert.equal(trust.sources[0].conclusion, '可用于 ROI 复盘');
+  assert.equal(trust.evidence.trustedSessionCount, 1);
+  assert.equal(trust.evidence.trustedTokenTotal, 120);
 });
 
 test('buildLocalTrust explains aggregate-only and demo states without pretending they are trusted', () => {
@@ -72,6 +76,32 @@ test('buildLocalTrust flags large daily/session/event mismatches as risk', () =>
   assert.equal(trust.conclusion.level, 'needs-coverage');
 });
 
+test('buildLocalTrust surfaces remote ingest mode without relaxing Dashboard APIs', () => {
+  const trust = buildLocalTrust({
+    runtime: runtime('real-event-verified', { tokenEventRows: 1 }, {
+      server: {
+        bindHost: 'non-loopback',
+        loopbackBind: false,
+        allowRemote: true,
+        remoteIngestMode: true,
+        ingestTokenConfigured: true,
+        dashboardApiRemoteAccess: false,
+        readGuard: 'loopback + local Origin',
+        writeGuard: 'loopback + local Origin + JSON',
+        xForwardedForTrusted: false
+      }
+    }),
+    daily: [{ source: 'Codex CLI', totalTokens: 100 }],
+    sessions: [{ source: 'Codex CLI', sessionId: 's1', totalTokens: 100 }],
+    tokenEvents: [{ source: 'Codex CLI', sessionId: 's1', inputTokens: 80, outputTokens: 20 }]
+  });
+
+  assert.equal(trust.security.level, 'remote-ingest');
+  assert.equal(trust.security.remoteIngestMode, true);
+  assert.equal(trust.security.dashboardApiRemoteAccess, false);
+  assert.equal(trust.security.xForwardedForTrusted, false);
+});
+
 test('sample rows and session labels never expose full local paths', () => {
   const samples = buildLocalTrustSamples({
     tokenEvents: [{
@@ -91,7 +121,7 @@ test('sample rows and session labels never expose full local paths', () => {
   assert.equal(sanitizeSessionLabel('/Users/ryan/private/repo/session.jsonl'), 'session.jsonl');
 });
 
-function runtime(id, counts = {}) {
+function runtime(id, counts = {}, overrides = {}) {
   return {
     packageVersion: '5.6.0',
     demoMode: id === 'demo',
@@ -108,9 +138,21 @@ function runtime(id, counts = {}) {
       label: id,
       message: `${id} message`
     },
+    server: {
+      bindHost: '127.0.0.1',
+      loopbackBind: true,
+      allowRemote: false,
+      remoteIngestMode: false,
+      ingestTokenConfigured: false,
+      dashboardApiRemoteAccess: false,
+      readGuard: 'loopback + local Origin',
+      writeGuard: 'loopback + local Origin + JSON',
+      xForwardedForTrusted: false
+    },
     coverageGate: {
       status: id === 'real-event-verified' ? 'passed' : 'not-run',
       message: 'coverage state'
-    }
+    },
+    ...overrides
   };
 }

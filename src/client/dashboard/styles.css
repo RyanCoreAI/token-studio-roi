@@ -1328,7 +1328,7 @@ button, input, select { font-family: inherit; color: inherit; }
 
 .local-trust-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 10px;
 }
@@ -1367,7 +1367,7 @@ button, input, select { font-family: inherit; color: inherit; }
 
 .local-trust-body {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.85fr) minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -1392,6 +1392,10 @@ button, input, select { font-family: inherit; color: inherit; }
   color: var(--muted);
   font-size: 11px;
   text-align: right;
+}
+
+.local-trust-card-head-spaced {
+  margin-top: 14px;
 }
 
 .local-trust-source-list {
@@ -1457,6 +1461,58 @@ button, input, select { font-family: inherit; color: inherit; }
   border: 1px solid var(--border-2);
   border-radius: 8px;
   background: var(--surface);
+}
+
+.local-trust-security,
+.local-trust-evidence-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.local-trust-security div,
+.local-trust-evidence-flow div {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.local-trust-security span,
+.local-trust-evidence-flow span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.local-trust-security strong,
+.local-trust-evidence-flow strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.local-trust-security p,
+.local-trust-evidence-flow p {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface), var(--bg) 25%);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.local-trust-security.security-remote-ingest p {
+  border-color: color-mix(in oklab, var(--c-amber), transparent 65%);
+  background: color-mix(in oklab, var(--c-amber), transparent 92%);
 }
 
 .local-trust-sample-table {
@@ -3453,6 +3509,8 @@ table.dt input[type="checkbox"] {
   .real-collect-guide,
   .local-trust-summary,
   .local-trust-body,
+  .local-trust-security,
+  .local-trust-evidence-flow,
   .collection-coverage-stats,
   .collection-coverage-grid,
   .project-coverage-grid,

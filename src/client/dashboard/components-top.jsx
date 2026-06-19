@@ -8,7 +8,7 @@ import { U } from '../shared/utils.js';
 // ───────────────────────────────────────────────────────────────
 // Topbar
 // ───────────────────────────────────────────────────────────────
-function Topbar({ lastSync, onRefresh, refreshing, onCollect, collecting, collectStatus, demoMode = false, onOpenImportBudget }) {
+function Topbar({ lastSync, onRefresh, refreshing, onCollect, collecting, collectStatus, demoMode = false, onOpenImportBudget, activePage = 'dashboard' }) {
   return (
     <div className="topbar">
       <div className="topbar-left">
@@ -20,8 +20,13 @@ function Topbar({ lastSync, onRefresh, refreshing, onCollect, collecting, collec
           </div>
         </div>
         <div className="page-switch">
-          <span className="page-chip active">看板</span>
+          {activePage === 'dashboard'
+            ? <span className="page-chip active">看板</span>
+            : <a href="/" className="page-chip">看板</a>}
           <a href="/review" className="page-chip">复盘</a>
+          {activePage === 'trust'
+            ? <span className="page-chip active">可信度</span>
+            : <a href="/trust" className="page-chip">可信度</a>}
           <a href="/live" className="page-chip">实时</a>
         </div>
         {demoMode && <span className="demo-mode-badge">Demo Mode</span>}

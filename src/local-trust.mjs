@@ -22,6 +22,7 @@ export function buildLocalTrust({
   return {
     generatedAt: new Date().toISOString(),
     conclusion,
+    security: buildSecuritySummary(runtime?.server || {}),
     dataMode: {
       id: dataMode.id || 'unknown',
       label: dataMode.label || 'Unknown',
@@ -206,16 +207,62 @@ function buildTrustSources({ coverageBridge, sourceHealth = [] }) {
 
 function buildCoverageToEvidenceSummary({ coverageBridge, evidenceFlywheel, sessions = [] }) {
   const quality = evidenceFlywheel?.quality || {};
+  const trustedSourceIds = new Set((Array.isArray(coverageBridge?.rows) ? coverageBridge.rows : [])
+    .filter(row => row.successfulCoverage)
+    .flatMap(row => [normalize(row.id), normalize(row.label)]));
+  const trustedSessions = sessions.filter(session =>
+    trustedSourceIds.has(normalize(session.source))
+    || Array.from(trustedSourceIds).some(source => source && normalize(session.source).includes(source))
+  );
+  const trustedTokenTotal = sumTokens(trustedSessions, row => row.totalTokens);
+  const allTokenTotal = sumTokens(sessions, row => row.totalTokens);
   return {
     coverageSourcesWithUsage: Number(coverageBridge?.summary?.sourcesWithUsage || 0),
     successfulCoverageSources: Number(coverageBridge?.summary?.successfulCoverage || 0),
+    trustedSessionCount: trustedSessions.length,
+    trustedTokenTotal,
+    untrustedSessionCount: Math.max(0, sessions.length - trustedSessions.length),
+    untrustedTokenTotal: Math.max(0, allTokenTotal - trustedTokenTotal),
     recognizedProjectCount: Number(evidenceFlywheel?.totals?.recognizedProjectCount || uniqueProjects(sessions)),
     directWriteCount: Number(quality.directWriteCount || 0),
     draftCount: Number(quality.draftCount || 0),
     blockedCount: Number(quality.blockedCount || 0),
     manualConfirmedCount: Number(quality.manualConfirmedCount || 0),
     autoHighConfidenceCount: Number(quality.autoHighConfidenceCount || 0),
-    nextAction: sanitizeText(evidenceFlywheel?.nextAction || '先确认最高成本证据缺口。')
+    nextAction: sanitizeText(evidenceFlywheel?.nextAction || '先确认最高成本证据缺口。'),
+    conclusion: trustedSessions.length
+      ? `已有 ${trustedSessions.length} 个可信来源 session 可进入证据飞轮。`
+      : '当前还没有来自可信覆盖来源的 session，先运行 coverage 或导入结构化 JSON。'
+  };
+}
+
+function buildSecuritySummary(server = {}) {
+  const loopbackBind = Boolean(server.loopbackBind);
+  const remoteIngestMode = Boolean(server.remoteIngestMode);
+  const dashboardApiRemoteAccess = Boolean(server.dashboardApiRemoteAccess);
+  const level = loopbackBind
+    ? 'local-only'
+    : remoteIngestMode ? 'remote-ingest' : 'unknown';
+  return {
+    level,
+    title: loopbackBind
+      ? 'API 只绑定本机'
+      : remoteIngestMode ? '远程 ingest 模式已开启' : '绑定状态待确认',
+    decision: loopbackBind
+      ? '普通 Dashboard API 只接受本机 socket 和本机 Origin。'
+      : remoteIngestMode
+        ? '服务允许非 loopback 绑定，但普通 Dashboard API 仍保持本机读写保护。'
+        : '当前 API 没有返回可确认的本机绑定状态。',
+    bindHost: sanitizeText(server.bindHost || ''),
+    readGuard: sanitizeText(server.readGuard || 'loopback + local Origin'),
+    writeGuard: sanitizeText(server.writeGuard || 'loopback + local Origin + JSON'),
+    remoteIngestMode,
+    ingestTokenConfigured: Boolean(server.ingestTokenConfigured),
+    dashboardApiRemoteAccess,
+    xForwardedForTrusted: Boolean(server.xForwardedForTrusted),
+    action: remoteIngestMode
+      ? '确认只把 ingest 暴露给可信网络；Dashboard 仍应从本机浏览器打开。'
+      : '保持默认本机启动即可；不要用 HOST=0.0.0.0 运行普通看板。'
   };
 }
 

@@ -1283,11 +1283,30 @@ function runtimeMetadata() {
       kind: demoMode ? 'demo sqlite' : 'real sqlite',
       fileName: basename(dbPath || defaultDbPath)
     },
+    server: serverSecurityMetadata(),
     counts,
     dataMode,
     latestCollectionRun: latestCollectionRun(),
     collectionCoverageAvailable: true,
     coverageGate
+  };
+}
+
+function serverSecurityMetadata() {
+  const bindHost = String(host || '').trim();
+  const loopbackBind = isLoopbackBindHost(bindHost);
+  const allowRemote = envFlag('TOKEN_STUDIO_ALLOW_REMOTE');
+  const ingestTokenConfigured = Boolean(String(process.env.INGEST_TOKEN || '').trim());
+  return {
+    bindHost: loopbackBind ? bindHost : 'non-loopback',
+    loopbackBind,
+    allowRemote,
+    remoteIngestMode: !loopbackBind && allowRemote && ingestTokenConfigured,
+    ingestTokenConfigured,
+    dashboardApiRemoteAccess: false,
+    readGuard: 'loopback + local Origin',
+    writeGuard: 'loopback + local Origin + JSON',
+    xForwardedForTrusted: false
   };
 }
 

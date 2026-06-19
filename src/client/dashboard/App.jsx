@@ -50,7 +50,7 @@ function summarizeCollectOutput(stdout) {
     : '采集完成';
 }
 
-export function App() {
+export function App({ routeMode = 'dashboard' }) {
   const [M, setM] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -467,7 +467,8 @@ export function App() {
         onSaveBudgetProfile={saveBudgetProfile}
         onDeleteBudgetProfile={deleteBudgetProfile}
         onApplyAutoAttribution={applyAutoAttribution}
-        onUndoAutoAttribution={undoAutoAttribution} />
+        onUndoAutoAttribution={undoAutoAttribution}
+        routeMode={routeMode} />
       {collectConfirmOpen && (
         <CollectConfirmModal
           busy={collecting}
@@ -509,7 +510,8 @@ function Dashboard({
   onSaveBudgetProfile,
   onDeleteBudgetProfile,
   onApplyAutoAttribution,
-  onUndoAutoAttribution
+  onUndoAutoAttribution,
+  routeMode = 'dashboard'
 }) {
   // ───── Filter state ─────
   const [filters, setFilters] = useState(() => ({
@@ -742,6 +744,7 @@ function Dashboard({
   };
 
   const lastSync = M.runs[0] ? U.formatTs(M.runs[0].collectedAt.replace(' ', 'T')) : '—';
+  const trustOnly = routeMode === 'trust';
 
   return (
     <div className="app">
@@ -753,6 +756,7 @@ function Dashboard({
         collecting={collecting}
         collectStatus={collectStatus}
         demoMode={M.meta?.demoMode}
+        activePage={trustOnly ? 'trust' : 'dashboard'}
         onOpenImportBudget={() => setImportBudgetOpen(true)} />
 
       <FilterBar
@@ -798,6 +802,31 @@ function Dashboard({
         trust={M.meta?.localTrust}
         onRunCoverage={onLoadCollectionCoverage}
         onOpenImportBudget={() => setImportBudgetOpen(true)} />
+
+      {trustOnly ? (
+        <>
+          <CollectionCoveragePanel
+            coverage={collectionCoverage}
+            loading={coverageLoading}
+            error={coverageError}
+            demoMode={M.meta?.demoMode}
+            onRefresh={onLoadCollectionCoverage} />
+          <SourceHealthPanel
+            rows={M.meta?.sourceHealth || []}
+            coverageBridge={M.meta?.coverageBridge}
+            onOpenImportBudget={() => setImportBudgetOpen(true)} />
+          {importBudgetOpen && (
+            <ImportBudgetModal
+              sources={allSources}
+              budgetProfiles={M.budgetProfiles || []}
+              onImportCcusageJson={onImportCcusageJson}
+              onSaveBudgetProfile={onSaveBudgetProfile}
+              onDeleteBudgetProfile={onDeleteBudgetProfile}
+              onClose={() => setImportBudgetOpen(false)} />
+          )}
+        </>
+      ) : (
+      <>
 
       {/* Charts grid */}
       <div className="grid dashboard-chart-grid">
@@ -979,6 +1008,8 @@ function Dashboard({
           onDeleteBudgetProfile={onDeleteBudgetProfile}
           onClose={() => setImportBudgetOpen(false)} />
       )}
+      </>
+      )}
     </div>
   );
 }
@@ -1098,6 +1129,7 @@ function LocalTrustWorkbenchPanel({ trust, onRunCoverage, onOpenImportBudget }) 
   const sources = (trust.sources || []).slice(0, 8);
   const samples = trust.samples || [];
   const evidence = trust.evidence || {};
+  const security = trust.security || {};
   const level = conclusion.level || 'unknown';
 
   return (
@@ -1117,9 +1149,10 @@ function LocalTrustWorkbenchPanel({ trust, onRunCoverage, onOpenImportBudget }) 
 
       <div className="local-trust-summary">
         <TrustStat label="数据模式" value={trust.dataMode?.label || 'Unknown'} detail={trust.dataMode?.message || ''} />
+        <TrustStat label="API 边界" value={security.title || '本机保护待确认'} detail={security.decision || '普通 API 应保持 loopback + local Origin。'} />
         <TrustStat label="总量校验" value={reconciliation.statusLabel || '未校验'} detail={reconciliation.note || ''} />
         <TrustStat label="Token Events" value={U.compactCN(trust.counts?.tokenEventRows || 0)} detail={`${U.compactCN(reconciliation.eventTotalTokens || 0)} tokens`} />
-        <TrustStat label="证据飞轮" value={`${evidence.successfulCoverageSources || 0} 来源`} detail={`${evidence.directWriteCount || 0} 可写入 · ${evidence.draftCount || 0} 草稿`} />
+        <TrustStat label="可信证据" value={U.compactCN(evidence.trustedTokenTotal || 0)} detail={`${evidence.trustedSessionCount || 0} sessions 可进入证据飞轮`} />
       </div>
 
       <div className="local-trust-body">
@@ -1142,6 +1175,48 @@ function LocalTrustWorkbenchPanel({ trust, onRunCoverage, onOpenImportBudget }) 
                 </small>
               </article>
             ))}
+          </div>
+        </div>
+
+        <div className="local-trust-card">
+          <div className="local-trust-card-head">
+            <strong>API 本机保护</strong>
+            <span>{security.level === 'remote-ingest' ? '远程 ingest 已开启' : '默认本机模式'}</span>
+          </div>
+          <div className={`local-trust-security security-${security.level || 'unknown'}`}>
+            <div>
+              <span>绑定</span>
+              <strong>{security.bindHost || '127.0.0.1'}</strong>
+            </div>
+            <div>
+              <span>读取</span>
+              <strong>{security.readGuard || 'loopback + local Origin'}</strong>
+            </div>
+            <div>
+              <span>写入</span>
+              <strong>{security.writeGuard || 'loopback + local Origin + JSON'}</strong>
+            </div>
+            <p>{security.action || '保持默认本机启动，不要把 Dashboard API 当远程服务暴露。'}</p>
+          </div>
+
+          <div className="local-trust-card-head local-trust-card-head-spaced">
+            <strong>Coverage → Evidence</strong>
+            <span>可信来源如何变成复盘证据</span>
+          </div>
+          <div className="local-trust-evidence-flow">
+            <div>
+              <span>已覆盖来源</span>
+              <strong>{evidence.successfulCoverageSources || 0}</strong>
+            </div>
+            <div>
+              <span>可信 session</span>
+              <strong>{U.compactCN(evidence.trustedSessionCount || 0)}</strong>
+            </div>
+            <div>
+              <span>待确认草稿</span>
+              <strong>{U.compactCN(evidence.draftCount || 0)}</strong>
+            </div>
+            <p>{evidence.conclusion || evidence.nextAction || '先确认最高成本证据缺口。'}</p>
           </div>
         </div>
 

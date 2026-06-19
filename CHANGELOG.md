@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.7.0
+
+- Added a `/trust` entry that focuses the Dashboard on Local Trust, Coverage Bridge, and Source Health without mixing in the full token dashboard.
+- Surfaced API/Host security state in Local Trust so users can see loopback binding, read/write guards, remote ingest mode, and the fact that ordinary Dashboard APIs are not remotely opened.
+- Connected trusted source coverage to Evidence Flywheel with trusted session/token counts and clearer Coverage-to-Evidence guidance.
+- Local-only UX milestone: this version is not published to npm in this stage.
+
 ## 5.6.1
 
 - Hardened non-public `/api/*` read routes so local data APIs require loopback requests and local browser Origin checks, matching the existing write-boundary posture.
