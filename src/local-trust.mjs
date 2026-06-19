@@ -7,13 +7,14 @@ export function buildLocalTrust({
   daily = [],
   sessions = [],
   tokenEvents = [],
+  tokenEventTotals = null,
   runs = [],
   evidenceFlywheel = null
 } = {}) {
   const dataMode = runtime?.dataMode || { id: 'unknown', label: 'Unknown', message: '当前 API 未返回数据模式。' };
   const coverageGate = runtime?.coverageGate || { status: 'not-run' };
   const counts = runtime?.counts || databaseCountsFromRows({ daily, sessions, tokenEvents, runs });
-  const reconciliation = buildReconciliation({ daily, sessions, tokenEvents });
+  const reconciliation = buildReconciliation({ daily, sessions, tokenEvents: tokenEventTotals || tokenEvents });
   const sources = buildTrustSources({ coverageBridge, sourceHealth });
   const conclusion = buildTrustConclusion({ dataMode, coverageGate, counts, reconciliation });
   const evidence = buildCoverageToEvidenceSummary({ coverageBridge, evidenceFlywheel, sessions });

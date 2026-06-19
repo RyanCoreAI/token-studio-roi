@@ -7,12 +7,15 @@ Token Studio ROI is designed as a local-first AI coding review tool.
 - No cloud sync.
 - No account system.
 - No remote telemetry.
-- No automatic scan of local AI tool logs on startup.
 - Demo mode uses synthetic records only.
+- `token-studio demo` and `token-studio start` do not scan real AI tool logs.
+- The bare `token-studio` command runs a local coverage check and writes only trusted Claude/Codex event-level token metadata when the gate passes.
 
 ## Real Collection
 
 Real collection runs only after explicit confirmation through the CLI or local UI.
+
+The bare CLI entrypoint is treated as explicit local use of Token Studio's auto flow. It scans only structured token metadata locations and still keeps detected-only sources out of SQLite unless reliable token fields exist.
 
 Supported v4.0 stable collectors read local structured usage metadata from:
 
@@ -24,6 +27,8 @@ Supported v4.0 stable collectors read local structured usage metadata from:
 - Hermes Agent
 
 Detected-only sources such as Cursor, GitHub Copilot CLI, Qwen Code, Kimi, and Goose are not written as usage rows until reliable token fixtures exist.
+
+ccusage import and bridge flows are explicit imports of structured JSON. Token Studio rejects conversation-like fields and recomputes costs with its own official-price table instead of trusting third-party cost values.
 
 ## Data Not Stored
 

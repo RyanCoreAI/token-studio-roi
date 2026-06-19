@@ -76,6 +76,20 @@ test('buildLocalTrust flags large daily/session/event mismatches as risk', () =>
   assert.equal(trust.conclusion.level, 'needs-coverage');
 });
 
+test('buildLocalTrust reconciles against full event totals while samples stay limited', () => {
+  const trust = buildLocalTrust({
+    runtime: runtime('real-event-verified', { tokenEventRows: 50000 }),
+    daily: [{ source: 'Codex CLI', totalTokens: 1000 }],
+    sessions: [{ source: 'Codex CLI', sessionId: 's1', totalTokens: 1000 }],
+    tokenEvents: [{ source: 'Codex CLI', sessionId: 'sample', inputTokens: 10 }],
+    tokenEventTotals: [{ source: 'Codex CLI', inputTokens: 900, outputTokens: 100 }]
+  });
+
+  assert.equal(trust.samples.length, 1);
+  assert.equal(trust.reconciliation.status, 'ok');
+  assert.equal(trust.conclusion.level, 'trusted');
+});
+
 test('buildLocalTrust surfaces remote ingest mode without relaxing Dashboard APIs', () => {
   const trust = buildLocalTrust({
     runtime: runtime('real-event-verified', { tokenEventRows: 1 }, {

@@ -299,6 +299,7 @@ async function handleApi(req, url, res) {
     const budgetProfiles = listBudgetProfiles(db);
     const advisorActions = listAdvisorActions(db);
     const tokenEvents = listTokenEvents(db, { limit: 1000 });
+    const tokenEventTotals = tokenEventTotalRows();
     const runtime = runtimeMetadata();
     const sourceHealthRows = sourceHealth();
     const coverageBridge = buildCoverageBridge({ sourceHealth: sourceHealthRows });
@@ -323,6 +324,7 @@ async function handleApi(req, url, res) {
       daily,
       sessions: pricedSessions,
       tokenEvents,
+      tokenEventTotals,
       runs: rawRuns,
       evidenceFlywheel
     });
@@ -1196,6 +1198,7 @@ function buildLocalTrustPayload() {
   const workItems = listWorkItems(db);
   const advisorActions = listAdvisorActions(db);
   const tokenEvents = listTokenEvents(db, { limit: 1000 });
+  const tokenEventTotals = tokenEventTotalRows();
   const runtime = runtimeMetadata();
   const sourceHealthRows = sourceHealth();
   const coverageBridge = buildCoverageBridge({ sourceHealth: sourceHealthRows });
@@ -1225,10 +1228,24 @@ function buildLocalTrustPayload() {
       daily,
       sessions,
       tokenEvents,
+      tokenEventTotals,
       runs,
       evidenceFlywheel
     })
   };
+}
+
+function tokenEventTotalRows() {
+  return all(`
+    SELECT source,
+      COALESCE(SUM(input_tokens), 0) AS inputTokens,
+      COALESCE(SUM(output_tokens), 0) AS outputTokens,
+      COALESCE(SUM(cache_read_tokens), 0) AS cacheReadTokens,
+      COALESCE(SUM(cache_creation_tokens), 0) AS cacheCreationTokens,
+      COALESCE(SUM(reasoning_tokens), 0) AS reasoningTokens
+    FROM token_events
+    GROUP BY source
+  `);
 }
 
 function sourceHealth(collectors = detectCollectors()) {

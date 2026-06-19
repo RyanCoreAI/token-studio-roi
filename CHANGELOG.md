@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.9.0
+
+- Finalized Token Studio ROI as a local trust-to-evidence review tool rather than an endless competitor catch-up project.
+- Added `docs/final-review.md` with the final product boundary, acceptance checklist, stop rules, and maintenance-only policy after v5.9.
+- Updated README, Privacy, and Notice wording to align on the final loop: real local token data, trusted coverage, evidence queue, ROI review, model strategy, and action report.
+- Refreshed demo/sanitized screenshots for Dashboard, `/trust`, `/review`, and `/live`; screenshots do not use real local SQLite data.
+- Local-only final polish milestone: this version is not published to npm in this stage.
+
 ## 5.8.0
 
 - Added Trust-to-Evidence Autopilot on the Dashboard and `/trust`, generating the top 10 trusted-source evidence gaps by official-price cost and token volume.

@@ -17,5 +17,8 @@ Token Studio ROI adds and productizes the following first-class features:
 - model policy Markdown export
 - official-price conversion boundaries
 - loopback-only local write API hardening
+- Local Trust Workbench and Coverage Bridge
+- Trust-to-Evidence Autopilot
+- final local review and stop-rule documentation
 
 The project does not claim provider-invoice accuracy and does not read, store, display, or export conversation content.

@@ -28,6 +28,8 @@ By default it does not read, display, or upload conversation content; it only re
 
 See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller competitor reference and differentiation notes.
 
+v5.9 is the local feature-freeze point. Token Studio will not keep expanding just because competitors have desktop apps, leaderboards, full TUIs, or more detected-only sources. Maintenance stays limited to real bugs, privacy/security, official price updates, and upstream log-format changes. See [docs/final-review.md](docs/final-review.md).
+
 ## What Makes ROI Different?
 
 v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence Flywheel make it clear whether data exists, where it came from, and whether it is enough for ROI decisions. This stage is local-source only; npm publication is a separate decision.
@@ -53,6 +55,7 @@ v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence
 - **Advisor Action Loop**: turns Savings Simulator and ROI Advisor recommendations into open/done/dismissed actions and includes them in weekly Markdown reports.
 - **Advisor Action Measurement**: compares same-scope before/after token and official-price trends for review actions, without claiming causal savings.
 - **Review Report v3**: adds Local Trust, Coverage-to-Evidence, Action trend, GitHub README positioning, and blog-case-study material to Markdown weekly reports.
+- **Final Review**: `docs/final-review.md` locks the product boundary, acceptance checklist, and stop rules to avoid endless low-return iteration.
 - **Collector Audit**: audits experimental collectors before upgrading support, without SQLite writes or full-path output.
 - **Work Evidence**: connects usage to projects, tasks, stages, value, output links, and work items.
 
@@ -109,11 +112,13 @@ See [docs/first-run.md](docs/first-run.md) for the first-run flow. The Dashboard
 
 These screenshots are from demo mode or sanitized synthetic data, not real local logs.
 
-![Token Studio ROI dashboard](docs/assets/token-studio-v45-dashboard.png)
+![Token Studio ROI dashboard](docs/assets/token-studio-v59-dashboard.png)
 
-![Token Studio ROI review](docs/assets/token-studio-v45-review.png)
+![Token Studio ROI local trust](docs/assets/token-studio-v59-trust.png)
 
-![Token Studio ROI live guardrails](docs/assets/token-studio-v45-live.png)
+![Token Studio ROI review](docs/assets/token-studio-v59-review.png)
+
+![Token Studio ROI live guardrails](docs/assets/token-studio-v59-live.png)
 
 Advanced troubleshooting commands:
 
