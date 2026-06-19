@@ -25,6 +25,7 @@ By default it does not read, display, or upload conversation content; it only re
 | ccusage | Broad coverage and mature JSON output | Token Studio ROI uses the bridge for coverage, then focuses on outputs and review |
 | CodeBurn | `npx` TUI and local cost observation | Token Studio ROI focuses on weekly reports, action loops, and model policy |
 | TokenTracker / CodexBar | Desktop visibility and quota surfaces | Token Studio ROI focuses on local ROI decisions and work evidence |
+| tokscale | CLI/TUI, contribution graphs, and leaderboards | Token Studio ROI avoids social display and keeps the local review loop |
 
 See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller competitor reference and differentiation notes.
 
@@ -32,7 +33,7 @@ v5.9 is the local feature-freeze point. Token Studio will not keep expanding jus
 
 ## What Makes ROI Different?
 
-v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence Flywheel make it clear whether data exists, where it came from, and whether it is enough for ROI decisions. This stage is local-source only; npm publication is a separate decision.
+v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence Flywheel make it clear whether data exists, where it came from, and whether it is enough for ROI decisions. v5.9.1 is the final public release candidate; publishing requires the local gate, GitHub release gate, tarball smoke, and npm post-publish smoke.
 
 - **Coverage Bridge Center**: separates sources into native trusted collection, ccusage importable, detected-only, and unsupported/no-token-field states so directory detection is not mistaken for real usage coverage.
 - **Coverage Bridge Workflow**: each source shows successful coverage, failure reasons, importable reports, and copy-only commands; the browser generates commands but never runs external scanners.
@@ -119,6 +120,13 @@ These screenshots are from demo mode or sanitized synthetic data, not real local
 ![Token Studio ROI review](docs/assets/token-studio-v59-review.png)
 
 ![Token Studio ROI live guardrails](docs/assets/token-studio-v59-live.png)
+
+Real local validation screenshots are for pre-release verification, not the default public hero assets. They may contain model names, project aliases, and aggregate token counts, but must not contain prompts, responses, transcripts, diffs, full local paths, or private exported reports.
+
+- [Real Dashboard with charts](docs/assets/token-studio-v591-real-dashboard.png)
+- [Real Local Trust](docs/assets/token-studio-v591-real-trust.png)
+- [Real Review](docs/assets/token-studio-v591-real-review.png)
+- [Real Live](docs/assets/token-studio-v591-real-live.png)
 
 Advanced troubleshooting commands:
 
@@ -240,10 +248,16 @@ Default URLs:
 - [ ] `npm test`
 - [ ] `npm run build`
 - [ ] `npm run privacy:check`
+- [ ] `node src/cli.mjs privacy-check --include-untracked`
 - [ ] `node src/cli.mjs coverage --sources=claude,codex,cursor --json`
+- [ ] `npm run smoke:npx`
+- [ ] `npm run smoke:browser`
+- [ ] `npm audit --audit-level=low`
 - [ ] `npm view token-studio version` is lower than this package version before publishing
 - [ ] `npm pack --dry-run`
+- [ ] `npm run smoke:published -- --version 5.9.1` after npm publish
 - [ ] demo screenshots come from demo mode
+- [ ] real validation screenshots are inspected and contain no transcript, diff, prompt, full path, or private export
 - [ ] `/live` loads from demo mode or temporary SQLite
 - [ ] no real `data/usage.sqlite`
 - [ ] no `.claude/`, `.codex/`, `.env`

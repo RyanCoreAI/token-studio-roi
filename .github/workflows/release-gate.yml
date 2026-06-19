@@ -32,9 +32,13 @@ jobs:
 
       - run: npm test
 
+      - run: node src/cli.mjs privacy-check --include-untracked
+
       - run: npm run build
 
       - run: npm run privacy:check
+
+      - run: npm audit --audit-level=low
 
       - run: npm run smoke:npx
 

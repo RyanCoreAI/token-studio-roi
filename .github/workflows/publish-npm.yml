@@ -1,0 +1,42 @@
+name: publish-npm
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish token-studio to npm
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - run: node src/cli.mjs privacy-check --include-untracked
+
+      - run: npm run build
+
+      - run: npm run privacy:check
+
+      - run: npm audit --audit-level=low
+
+      - run: npm run smoke:npx
+
+      - run: npm pack --dry-run
+
+      - run: git diff --check
+
+      - run: npm publish --provenance --access public

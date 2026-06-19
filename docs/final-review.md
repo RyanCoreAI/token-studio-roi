@@ -31,6 +31,11 @@ Token Studio ROI is considered feature-complete for the v5 local line. The produ
 - Review pages show evidence provenance for savings, model strategy, and advisor actions.
 - Markdown report includes Local Trust, Coverage-to-Evidence, output evidence, model strategy, and action trend sections.
 - Privacy check passes and publish tarballs contain no real SQLite databases, `.env`, AI logs, real exports, or personal paths.
+- Public README uses demo/sanitized screenshots by default, while local validation keeps separately labeled real screenshots:
+  - `docs/assets/token-studio-v591-real-dashboard.png`
+  - `docs/assets/token-studio-v591-real-trust.png`
+  - `docs/assets/token-studio-v591-real-review.png`
+  - `docs/assets/token-studio-v591-real-live.png`
 
 ## Stop Rules
 
@@ -51,4 +56,4 @@ Explicit non-goals after v5.9:
 
 ## Release Position
 
-v5.9 is a local final polish milestone. npm publishing, GitHub release notes, or public promotion are separate release decisions and should only happen after the full local gate passes.
+v5.9.1 is the final public release candidate. npm publishing, GitHub release notes, or public promotion should only happen after the local gate, GitHub release gate, tarball smoke, real screenshot inspection, and npm post-publish smoke pass.

@@ -25,6 +25,7 @@ npx token-studio
 | ccusage | 覆盖广、JSON 输出成熟 | Token Studio ROI 用 ccusage bridge 补覆盖，但重点做产出和复盘 |
 | CodeBurn | `npx` TUI 和本地成本观测 | Token Studio ROI 做周报、行动闭环和模型策略 |
 | TokenTracker / CodexBar | 桌面组件、限额可见性 | Token Studio ROI 做本地 ROI 决策和工作证据 |
+| tokscale | CLI/TUI、贡献图和 leaderboard | Token Studio ROI 不追社交化展示，保留本地复盘闭环 |
 
 更完整的竞品参考和差异化记录见 [docs/competitive-notes.md](docs/competitive-notes.md)。
 
@@ -32,7 +33,7 @@ v5.9 是本地功能收口点。后续不再因为竞品有桌面端、leaderboa
 
 ## What Makes ROI Different?
 
-Token Studio ROI 的 v5 重点不是再堆一个 token meter，而是把统计结果转成可执行复盘证据，并用 Coverage Bridge + Evidence Flywheel 把“有没有数据、数据从哪来、能不能支撑 ROI 判断”讲清楚。本阶段先在源码本地收口，npm 发布另行决定。
+Token Studio ROI 的 v5 重点不是再堆一个 token meter，而是把统计结果转成可执行复盘证据，并用 Coverage Bridge + Evidence Flywheel 把“有没有数据、数据从哪来、能不能支撑 ROI 判断”讲清楚。v5.9.1 是最终公开发布候选；发布前必须通过本地 gate、GitHub release gate、tarball smoke 和 npm post-publish smoke。
 
 - **Coverage Bridge Center**：把来源分成原生可信采集、ccusage 可导入、仅检测到、不支持/无 token 字段，避免把目录检测误认为真实覆盖。
 - **Coverage Bridge Workflow**：每个来源给出成功覆盖、失败原因、可导入 report 和 copy-only 命令；浏览器只生成命令，不运行外部扫描器。
@@ -119,6 +120,13 @@ node src/cli.mjs
 ![Token Studio ROI review](docs/assets/token-studio-v59-review.png)
 
 ![Token Studio ROI live guardrails](docs/assets/token-studio-v59-live.png)
+
+真实本地验收截图只用于发布前核对，不作为默认公开首屏素材；截图允许包含模型名、项目别名和聚合 token 数，但不得包含 prompt、response、transcript、diff、完整本机路径或私有导出报告。
+
+- [真实 Dashboard，含图表](docs/assets/token-studio-v591-real-dashboard.png)
+- [真实 Local Trust](docs/assets/token-studio-v591-real-trust.png)
+- [真实 Review](docs/assets/token-studio-v591-real-review.png)
+- [真实 Live](docs/assets/token-studio-v591-real-live.png)
 
 高级排错命令：
 
@@ -240,10 +248,16 @@ npm run dev
 - [ ] `npm test`
 - [ ] `npm run build`
 - [ ] `npm run privacy:check`
+- [ ] `node src/cli.mjs privacy-check --include-untracked`
 - [ ] `node src/cli.mjs coverage --sources=claude,codex,cursor --json`
+- [ ] `npm run smoke:npx`
+- [ ] `npm run smoke:browser`
+- [ ] `npm audit --audit-level=low`
 - [ ] `npm view token-studio version` is lower than this package version before publishing
 - [ ] `npm pack --dry-run`
+- [ ] `npm run smoke:published -- --version 5.9.1` after npm publish
 - [ ] demo screenshots come from demo mode
+- [ ] real validation screenshots are inspected and contain no transcript, diff, prompt, full path, or private export
 - [ ] `/live` loads from demo mode or temporary SQLite
 - [ ] no real `data/usage.sqlite`
 - [ ] no `.claude/`, `.codex/`, `.env`

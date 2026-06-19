@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.9.1
+
+- Prepared the final public release candidate without adding product features.
+- Updated README and launch checklist wording around `npx token-studio`, demo mode, real validation screenshots, npm post-publish smoke, and the v5 stop rule.
+- Added a manual npm publish workflow for Trusted Publishing / provenance while keeping release gates read-only by default.
+- Strengthened release-gate checks with untracked-file privacy scanning and `npm audit --audit-level=low`.
+
 ## 5.9.0
 
 - Finalized Token Studio ROI as a local trust-to-evidence review tool rather than an endless competitor catch-up project.
