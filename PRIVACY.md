@@ -55,13 +55,15 @@ The privacy check looks for real SQLite databases, AI log directories, `.env` fi
 
 The local server binds to `127.0.0.1` by default.
 
+All non-public `/api/*` read APIs require loopback request address plus a local or empty Origin before returning local data.
+
 All write APIs require:
 
 - loopback request address
 - local or empty Origin
 - `Content-Type: application/json`
 
-The server does not trust `X-Forwarded-For` for local access checks.
+The server does not trust `X-Forwarded-For` for local access checks. Non-loopback binds such as `HOST=0.0.0.0` are refused unless `TOKEN_STUDIO_ALLOW_REMOTE=1` and `INGEST_TOKEN` are both set. That mode is for explicit ingest use and does not relax normal Dashboard API read/write guards.
 
 ## Cost Boundary
 

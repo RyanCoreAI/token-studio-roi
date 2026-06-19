@@ -139,7 +139,7 @@ test('markdown report includes savings simulation without invoice wording', () =
   });
   const report = buildMarkdownReviewReport({ period, savingsSimulation });
 
-  assert.match(report, /## 8\. 节省模拟/);
+  assert.match(report, /## 9\. 节省模拟/);
   assert.match(report, /官方价换算节省模拟只用于比较模型策略，不是供应商账单/);
   assert.match(report, /不承诺真实账单节省/);
 });

@@ -794,6 +794,11 @@ function Dashboard({
         onStartCollect={onCollect}
         onRefresh={onRefresh} />
 
+      <LocalTrustWorkbenchPanel
+        trust={M.meta?.localTrust}
+        onRunCoverage={onLoadCollectionCoverage}
+        onOpenImportBudget={() => setImportBudgetOpen(true)} />
+
       {/* Charts grid */}
       <div className="grid dashboard-chart-grid">
         <div className="col-8">
@@ -1084,6 +1089,125 @@ function coverageTrustSentence(coverage) {
     return `${trusted.map(source => source.label || source.id).join(' / ')} 已通过 event/session/daily 校验${cursorText}。`;
   }
   return `还没有可信 event 级来源${cursorText}。`;
+}
+
+function LocalTrustWorkbenchPanel({ trust, onRunCoverage, onOpenImportBudget }) {
+  if (!trust) return null;
+  const conclusion = trust.conclusion || {};
+  const reconciliation = trust.reconciliation || {};
+  const sources = (trust.sources || []).slice(0, 8);
+  const samples = trust.samples || [];
+  const evidence = trust.evidence || {};
+  const level = conclusion.level || 'unknown';
+
+  return (
+    <section className={`local-trust-panel trust-${level}`} aria-label="本地可信工作台">
+      <div className="local-trust-head">
+        <div>
+          <div className="eyebrow">Local Trust Workbench</div>
+          <h2>{conclusion.title || '当前数据可信度待确认'}</h2>
+          <p>{conclusion.decision || '这里集中解释数据模式、coverage、总量校验、来源失败原因和脱敏样本。'}</p>
+        </div>
+        <div className="local-trust-actions">
+          <span className={`trust-badge trust-badge-${level}`}>{trustDecisionLabel(level)}</span>
+          <button className="btn" onClick={onRunCoverage}>只读 coverage</button>
+          <button className="btn btn-primary" onClick={onOpenImportBudget}>导入 ccusage JSON</button>
+        </div>
+      </div>
+
+      <div className="local-trust-summary">
+        <TrustStat label="数据模式" value={trust.dataMode?.label || 'Unknown'} detail={trust.dataMode?.message || ''} />
+        <TrustStat label="总量校验" value={reconciliation.statusLabel || '未校验'} detail={reconciliation.note || ''} />
+        <TrustStat label="Token Events" value={U.compactCN(trust.counts?.tokenEventRows || 0)} detail={`${U.compactCN(reconciliation.eventTotalTokens || 0)} tokens`} />
+        <TrustStat label="证据飞轮" value={`${evidence.successfulCoverageSources || 0} 来源`} detail={`${evidence.directWriteCount || 0} 可写入 · ${evidence.draftCount || 0} 草稿`} />
+      </div>
+
+      <div className="local-trust-body">
+        <div className="local-trust-card">
+          <div className="local-trust-card-head">
+            <strong>来源结论</strong>
+            <span>为什么有 / 没有数据</span>
+          </div>
+          <div className="local-trust-source-list">
+            {sources.length === 0 && <div className="empty compact-empty">暂无来源可信度数据</div>}
+            {sources.map(source => (
+              <article key={source.id} className={`local-trust-source status-${source.status || 'unknown'}`}>
+                <div>
+                  <strong>{source.label}</strong>
+                  <span>{source.statusLabel} · {source.conclusion}</span>
+                </div>
+                <p>{source.reason}</p>
+                <small>
+                  {U.compactCN(source.sessions || 0)} sessions · {U.compactCN(source.tokenEvents || 0)} events · {U.compactCN(source.totalTokens || 0)} tokens
+                </small>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="local-trust-card">
+          <div className="local-trust-card-head">
+            <strong>脱敏 sample rows</strong>
+            <span>只看 source / model / session / token / time</span>
+          </div>
+          <div className="local-trust-sample-wrap">
+            {samples.length === 0 ? (
+              <div className="empty compact-empty">暂无 event 级样本。聚合旧库只能看趋势。</div>
+            ) : (
+              <table className="local-trust-sample-table">
+                <thead>
+                  <tr>
+                    <th>来源</th>
+                    <th>模型</th>
+                    <th>Session</th>
+                    <th>Tokens</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {samples.slice(0, 8).map((row, index) => (
+                    <tr key={`${row.source}-${row.model}-${row.session}-${row.timestamp}-${index}`}>
+                      <td>{row.source || '—'}</td>
+                      <td>{row.model || '—'}</td>
+                      <td>{row.session || '—'}</td>
+                      <td>{U.compactCN(row.totalTokens || 0)}</td>
+                      <td>{String(row.timestamp || '').slice(0, 16) || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <p className="local-trust-privacy">{trust.privacy?.note}</p>
+        </div>
+      </div>
+
+      <div className="local-trust-next">
+        <strong>下一步：</strong>
+        <span>{conclusion.action || evidence.nextAction || '先确认 coverage，再进入 /review 生成复盘证据。'}</span>
+      </div>
+    </section>
+  );
+}
+
+function TrustStat({ label, value, detail }) {
+  return (
+    <article>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </article>
+  );
+}
+
+function trustDecisionLabel(level) {
+  return ({
+    trusted: '可强复盘',
+    'trend-only': '只能看趋势',
+    'needs-coverage': '需重新检查',
+    demo: 'Demo',
+    empty: '空库'
+  })[level] || '待确认';
 }
 
 function FirstRunPanel({ state, onOpenImportBudget }) {

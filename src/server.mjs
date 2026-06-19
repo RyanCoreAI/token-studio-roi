@@ -63,6 +63,7 @@ import { buildSourceHealth } from './source-health.mjs';
 import { buildProjectCoverage, buildReviewWorkflow } from './project-coverage.mjs';
 import { buildCoverageBridge } from './coverage-bridge.mjs';
 import { buildEvidenceFlywheel } from './evidence-flywheel.mjs';
+import { buildLocalTrust, buildLocalTrustSamples } from './local-trust.mjs';
 import {
   applyEvidenceSuggestions,
   buildEvidenceAutopilotPlan
@@ -70,6 +71,10 @@ import {
 
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || process.env.BIND_HOST || '127.0.0.1';
+validateHostConfiguration(host, {
+  allowRemote: envFlag('TOKEN_STUDIO_ALLOW_REMOTE'),
+  ingestToken: process.env.INGEST_TOKEN
+});
 const staticDir = existsSync(resolve(process.cwd(), 'dist'))
   ? resolve(process.cwd(), 'dist')
   : resolve(process.cwd(), 'public');
@@ -107,7 +112,8 @@ server.listen(port, host, () => {
 });
 
 async function handleApi(req, url, res) {
-  if (url.pathname === '/api/summary') {
+  if (url.pathname === '/api/summary' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '汇总接口')) return;
     sendJson(res, {
       totals: one(`
         SELECT
@@ -159,7 +165,8 @@ async function handleApi(req, url, res) {
     });
     return;
   }
-  if (url.pathname === '/api/data') {
+  if (url.pathname === '/api/data' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '数据接口')) return;
     const aliasRules = listProjectAliasRules(db);
     const enabledAliasRules = aliasRules.filter(rule => rule.enabled);
     const rawSessions = all(`
@@ -309,6 +316,16 @@ async function handleApi(req, url, res) {
       evidencePlan,
       coverageBridge
     });
+    const localTrust = buildLocalTrust({
+      runtime,
+      coverageBridge,
+      sourceHealth: sourceHealthRows,
+      daily,
+      sessions: pricedSessions,
+      tokenEvents,
+      runs: rawRuns,
+      evidenceFlywheel
+    });
 
     sendJson(res, {
       meta: {
@@ -330,6 +347,7 @@ async function handleApi(req, url, res) {
         sourceHealth: sourceHealthRows,
         coverageBridge,
         evidenceFlywheel,
+        localTrust,
         projectCoverage: buildProjectCoverage({ sessions: pricedSessions }),
         reviewWorkflow: buildReviewWorkflow({ sessions: pricedSessions, advisorActions })
       },
@@ -349,6 +367,7 @@ async function handleApi(req, url, res) {
     return;
   }
   if (url.pathname === '/api/collectors' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '采集器接口')) return;
     const collectors = detectCollectors();
     sendJson(res, { collectors, sourceHealth: sourceHealth(collectors) });
     return;
@@ -362,6 +381,28 @@ async function handleApi(req, url, res) {
     if (!validateLocalRead(req, res, '覆盖桥接口')) return;
     const rows = sourceHealth();
     sendJson(res, { ok: true, coverageBridge: buildCoverageBridge({ sourceHealth: rows }) });
+    return;
+  }
+  if (url.pathname === '/api/local-trust' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '本地可信度接口')) return;
+    const payload = buildLocalTrustPayload();
+    sendJson(res, { ok: true, localTrust: payload.localTrust });
+    return;
+  }
+  if (url.pathname === '/api/local-trust/samples' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '本地可信度样本接口')) return;
+    const source = url.searchParams.get('source');
+    const limit = Number(url.searchParams.get('limit') || 20);
+    const payload = buildLocalTrustPayload();
+    sendJson(res, {
+      ok: true,
+      samples: buildLocalTrustSamples({
+        tokenEvents: payload.tokenEvents,
+        sessions: payload.sessions,
+        source,
+        limit
+      })
+    });
     return;
   }
   if (url.pathname === '/api/evidence-flywheel' && req.method === 'GET') {
@@ -451,6 +492,7 @@ async function handleApi(req, url, res) {
     return;
   }
   if (url.pathname === '/api/work-items' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '工作项接口')) return;
     sendJson(res, { workItems: listWorkItems(db) });
     return;
   }
@@ -467,6 +509,7 @@ async function handleApi(req, url, res) {
     return;
   }
   if (url.pathname === '/api/project-alias-rules' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '项目别名规则接口')) return;
     sendJson(res, { rules: listProjectAliasRules(db), matchTypes: PROJECT_ALIAS_MATCH_TYPES });
     return;
   }
@@ -534,7 +577,8 @@ async function handleApi(req, url, res) {
     handleCollect(req, res);
     return;
   }
-  if (url.pathname === '/api/collect/status') {
+  if (url.pathname === '/api/collect/status' && req.method === 'GET') {
+    if (!validateLocalRead(req, res, '采集状态接口')) return;
     sendJson(res, collectionState);
     return;
   }
@@ -1128,6 +1172,65 @@ function liveTokenEvents() {
   `);
 }
 
+function buildLocalTrustPayload() {
+  const { sessions, projectAliasRules } = buildAutoAttributionContext();
+  const daily = all(`
+    SELECT rowid AS id, device, source,
+      usage_date AS usageDate, model,
+      input_tokens AS inputTokens,
+      output_tokens AS outputTokens,
+      cache_creation_tokens AS cacheCreationTokens,
+      cache_read_tokens AS cacheReadTokens,
+      cached_input_tokens AS cachedInputTokens,
+      reasoning_output_tokens AS reasoningOutputTokens,
+      total_tokens AS totalTokens,
+      cost_usd AS costUSD
+    FROM daily_usage
+    ORDER BY usage_date DESC
+  `).map(row => attachOfficialPricing(row, row.model, providerFromSource(row.source)));
+  const runs = all(`
+    SELECT id, device, source, status, message, collected_at AS collectedAt
+    FROM collection_runs
+    ORDER BY id DESC
+  `);
+  const workItems = listWorkItems(db);
+  const advisorActions = listAdvisorActions(db);
+  const tokenEvents = listTokenEvents(db, { limit: 1000 });
+  const runtime = runtimeMetadata();
+  const sourceHealthRows = sourceHealth();
+  const coverageBridge = buildCoverageBridge({ sourceHealth: sourceHealthRows });
+  const evidencePlan = buildEvidenceAutopilotPlan({
+    sessions,
+    projectAliasRules,
+    period: 'all',
+    threshold: AUTO_ATTRIBUTION_THRESHOLD,
+    scanGit: false
+  });
+  const evidenceFlywheel = buildEvidenceFlywheel({
+    sessions,
+    workItems,
+    advisorActions,
+    evidencePlan,
+    coverageBridge
+  });
+  return {
+    daily,
+    sessions,
+    runs,
+    tokenEvents,
+    localTrust: buildLocalTrust({
+      runtime,
+      coverageBridge,
+      sourceHealth: sourceHealthRows,
+      daily,
+      sessions,
+      tokenEvents,
+      runs,
+      evidenceFlywheel
+    })
+  };
+}
+
 function sourceHealth(collectors = detectCollectors()) {
   return buildSourceHealth({
     collectors,
@@ -1571,6 +1674,35 @@ function createDbBackup({ reason = 'manual' } = {}) {
 function trimOutput(value) {
   const text = String(value || '').trim();
   return text.length > 12000 ? `${text.slice(-12000)}` : text;
+}
+
+function validateHostConfiguration(bindHost, { allowRemote = false, ingestToken = '' } = {}) {
+  if (isLoopbackBindHost(bindHost)) return;
+  if (!allowRemote) {
+    console.error(
+      `Refusing to listen on non-loopback host "${bindHost}". `
+      + 'Use HOST=127.0.0.1, or set TOKEN_STUDIO_ALLOW_REMOTE=1 with INGEST_TOKEN for explicit remote ingest mode.'
+    );
+    process.exit(1);
+  }
+  if (!String(ingestToken || '').trim()) {
+    console.error(
+      'Refusing remote bind without INGEST_TOKEN. '
+      + 'TOKEN_STUDIO_ALLOW_REMOTE=1 requires INGEST_TOKEN; Dashboard APIs remain loopback/local-origin only.'
+    );
+    process.exit(1);
+  }
+}
+
+function isLoopbackBindHost(bindHost = '') {
+  const value = String(bindHost || '').trim().toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
+  if (!value) return false;
+  if (value === '0.0.0.0' || value === '::') return false;
+  return isLoopback(value);
+}
+
+function envFlag(name) {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env[name] || '').trim().toLowerCase());
 }
 
 function isLoopback(address = '') {

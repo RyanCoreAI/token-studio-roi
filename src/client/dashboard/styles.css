@@ -1244,6 +1244,271 @@ button, input, select { font-family: inherit; color: inherit; }
   line-height: 1.45;
 }
 
+/* ─── Local Trust Workbench ───────────────────────────────── */
+
+.local-trust-panel {
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in oklab, var(--c-teal), var(--border) 64%);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, color-mix(in oklab, var(--surface), var(--c-teal) 5%), var(--surface));
+  box-shadow: 0 14px 34px -30px rgb(0 0 0 / 0.28);
+}
+
+.local-trust-panel.trust-needs-coverage,
+.local-trust-panel.trust-trend-only {
+  border-color: color-mix(in oklab, var(--c-amber), var(--border) 56%);
+  background: linear-gradient(135deg, color-mix(in oklab, var(--surface), var(--c-amber) 6%), var(--surface));
+}
+
+.local-trust-panel.trust-demo,
+.local-trust-panel.trust-empty {
+  border-color: color-mix(in oklab, var(--muted), var(--border) 60%);
+  background: var(--surface);
+}
+
+.local-trust-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.local-trust-head h2 {
+  margin: 3px 0 6px;
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.local-trust-head p {
+  max-width: 840px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.local-trust-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.trust-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.trust-badge-trusted {
+  border-color: color-mix(in oklab, var(--good), transparent 65%);
+  background: color-mix(in oklab, var(--good), transparent 92%);
+  color: var(--good);
+}
+
+.trust-badge-needs-coverage,
+.trust-badge-trend-only {
+  border-color: color-mix(in oklab, var(--c-amber), transparent 65%);
+  background: color-mix(in oklab, var(--c-amber), transparent 92%);
+  color: var(--c-amber);
+}
+
+.local-trust-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.local-trust-summary article,
+.local-trust-card {
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface), var(--bg) 25%);
+}
+
+.local-trust-summary article {
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.local-trust-summary span,
+.local-trust-summary p {
+  display: block;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.local-trust-summary strong {
+  display: block;
+  margin: 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.local-trust-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 10px;
+}
+
+.local-trust-card {
+  min-width: 0;
+  padding: 12px;
+}
+
+.local-trust-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.local-trust-card-head strong {
+  font-size: 13px;
+}
+
+.local-trust-card-head span {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.local-trust-source-list {
+  display: grid;
+  gap: 8px;
+  max-height: 340px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.local-trust-source {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.local-trust-source.status-native-trusted {
+  border-color: color-mix(in oklab, var(--good), transparent 78%);
+}
+
+.local-trust-source.status-detected-only {
+  border-color: color-mix(in oklab, var(--c-amber), transparent 74%);
+}
+
+.local-trust-source div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.local-trust-source strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.local-trust-source span,
+.local-trust-source p,
+.local-trust-source small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.local-trust-source span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.local-trust-source p {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+}
+
+.local-trust-sample-wrap {
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.local-trust-sample-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.local-trust-sample-table th,
+.local-trust-sample-table td {
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--border-2);
+  text-align: left;
+  vertical-align: top;
+}
+
+.local-trust-sample-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.local-trust-sample-table td {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.local-trust-privacy,
+.local-trust-next {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.local-trust-next {
+  padding: 10px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface), var(--bg) 22%);
+}
+
+.local-trust-next strong {
+  color: var(--text);
+}
+
 /* ─── Collection coverage gate ───────────────────────────── */
 
 .collection-coverage-panel {
@@ -3138,6 +3403,8 @@ table.dt input[type="checkbox"] {
   .kpi-row { grid-template-columns: repeat(3, 1fr); }
   .model-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-coverage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .local-trust-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .local-trust-body { grid-template-columns: 1fr; }
   .review-workflow-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .attribution-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .roi-review { grid-template-columns: 1fr; }
@@ -3184,6 +3451,8 @@ table.dt input[type="checkbox"] {
   .auto-attribution-stats,
   .data-source-status-grid,
   .real-collect-guide,
+  .local-trust-summary,
+  .local-trust-body,
   .collection-coverage-stats,
   .collection-coverage-grid,
   .project-coverage-grid,
@@ -3196,11 +3465,34 @@ table.dt input[type="checkbox"] {
     justify-content: flex-start;
   }
   .project-coverage-head,
+  .local-trust-head,
   .data-source-status-main,
   .collection-coverage-head,
+  .local-trust-actions,
   .project-coverage-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+  .local-trust-actions {
+    min-width: 0;
+  }
+  .local-trust-actions .btn {
+    width: 100%;
+  }
+  .local-trust-card-head,
+  .local-trust-source div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .local-trust-card-head span {
+    text-align: left;
+  }
+  .local-trust-source span {
+    white-space: normal;
+  }
+  .local-trust-source-list,
+  .local-trust-sample-wrap {
+    max-height: 300px;
   }
   .data-source-version {
     min-width: 0;

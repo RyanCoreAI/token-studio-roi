@@ -21,6 +21,7 @@ export function buildMarkdownReviewReport({
   insights = [],
   coverageBridge = null,
   evidenceFlywheel = null,
+  localTrust = null,
   generatedAt = new Date()
 } = {}) {
   const totals = aggregateDaily(daily);
@@ -61,7 +62,11 @@ export function buildMarkdownReviewReport({
       ]
     ),
     '',
-    '## 2. Coverage Bridge',
+    '## 2. Local Trust',
+    '',
+    localTrustSection(localTrust),
+    '',
+    '## 3. Coverage Bridge',
     '',
     coverageBridge ? [
       'Coverage Bridge 只说明来源覆盖方式，不把 detected-only 包装成真实 token 覆盖。',
@@ -89,7 +94,7 @@ export function buildMarkdownReviewReport({
       ) : '暂无来源覆盖数据。'
     ].join('\n') : '当前 API 没有返回 Coverage Bridge 数据。',
     '',
-    '## 3. Evidence Flywheel',
+    '## 4. Evidence Flywheel',
     '',
     evidenceFlywheel ? [
       table(
@@ -104,6 +109,10 @@ export function buildMarkdownReviewReport({
         ]
       ),
       '',
+      '### Coverage-to-Evidence',
+      '',
+      coverageToEvidenceTable({ localTrust, evidenceFlywheel, coverageBridge }),
+      '',
       `下一步：${safeText(evidenceFlywheel.nextAction || '抽查最高成本自动证据。')}`,
       '',
       evidenceFlywheel.steps?.length ? table(
@@ -117,7 +126,7 @@ export function buildMarkdownReviewReport({
       ) : ''
     ].join('\n') : '当前 API 没有返回 Evidence Flywheel 数据。',
     '',
-    '## 4. 成本最高项目',
+    '## 5. 成本最高项目',
     '',
     projectRows.length ? table(
       ['项目', 'Sessions', 'Tokens', '官方价', '完成/发布占比', '风险占比'],
@@ -131,7 +140,7 @@ export function buildMarkdownReviewReport({
       ])
     ) : '本期没有项目数据。',
     '',
-    '## 5. 模型使用分布',
+    '## 6. 模型使用分布',
     '',
     modelRows.length ? table(
       ['模型', '来源', 'Tokens', '官方价', '占比'],
@@ -144,7 +153,7 @@ export function buildMarkdownReviewReport({
       ])
     ) : '本期没有模型数据。',
     '',
-    '## 6. 已完成 / 已发布产出',
+    '## 7. 已完成 / 已发布产出',
     '',
     outputRows.length ? table(
       ['状态', '类型', '标签', '项目', '链接'],
@@ -157,7 +166,7 @@ export function buildMarkdownReviewReport({
       ])
     ) : '本期没有已完成/已发布的产出链接。建议先给高价值 session 补 PR、commit、文章、部署、文档或截图链接。',
     '',
-    '## 7. 风险成本',
+    '## 8. 风险成本',
     '',
     riskRows.length ? table(
       ['风险类型', 'Sessions', 'Tokens', '官方价', '占比'],
@@ -186,7 +195,7 @@ export function buildMarkdownReviewReport({
       ])
     ) : '本期没有待补齐的高成本归因 session。',
     '',
-    '## 8. 节省模拟',
+    '## 9. 节省模拟',
     '',
     savingsSimulation?.suggestions?.length ? [
       '官方价换算节省模拟只用于比较模型策略，不是供应商账单。',
@@ -209,7 +218,7 @@ export function buildMarkdownReviewReport({
     '',
     savingsSimulation?.unpriced?.sessionCount ? `未纳入成本决策：${formatInt(savingsSimulation.unpriced.sessionCount)} 个 session、${compactCN(savingsSimulation.unpriced.totalTokens)} tokens 没有公开官方美元价，模型包括 ${safeText(savingsSimulation.unpriced.models.join('、') || 'unknown')}。` : '',
     '',
-    '## 9. ROI Advisor 建议',
+    '## 10. ROI Advisor 建议',
     '',
     roiAdvice.length ? roiAdvice.map((item, index) => [
       `### ${index + 1}. ${safeText(item.title)}`,
@@ -222,7 +231,7 @@ export function buildMarkdownReviewReport({
       `- 建议动作：${safeText(item.action)}`
     ].join('\n')).join('\n\n') : '本期没有触发 ROI Advisor 建议。',
     '',
-    '## 10. 本周行动状态',
+    '## 11. 本周行动状态',
     '',
     actionStatusRows.length ? table(
       ['状态', '分类', '建议', '行动'],
@@ -255,11 +264,11 @@ export function buildMarkdownReviewReport({
       ''
     ].join('\n') : '',
     '',
-    '## 11. 下周行动清单',
+    '## 12. 下周行动清单',
     '',
     actionItems.length ? actionItems.map(item => `- ${safeText(item)}`).join('\n') : '- 保持当前模型和上下文使用策略，继续补充真实产出链接。',
     '',
-    '## 12. 口径说明',
+    '## 13. 口径说明',
     '',
     '- 金额为官方公开 token 单价换算，不是供应商账单或财务对账结果。',
     '- 节省模拟使用当前 token 结构和已配置官方价模型做策略比较，不承诺真实账单节省。',
@@ -366,6 +375,96 @@ function buildAdvisorActionRows(actions = [], period = {}) {
     ))
     .sort((a, b) => statusRank(a.status) - statusRank(b.status) || String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
     .slice(0, 12);
+}
+
+function localTrustSection(localTrust) {
+  if (!localTrust) {
+    return '当前 API 没有返回 Local Trust 数据。建议重启最新版 Token Studio 后再导出报告。';
+  }
+  const conclusion = localTrust.conclusion || {};
+  const reconciliation = localTrust.reconciliation || {};
+  const runtime = localTrust.runtime || {};
+  const counts = localTrust.counts || {};
+  const lines = [
+    'Local Trust 说明当前数据能否用于 ROI 复盘。它只使用结构化 token/session 元数据，不返回 prompt、response、transcript、diff 或完整本机路径。',
+    '',
+    table(
+      ['项目', '结论'],
+      [
+        ['可信度结论', conclusion.decision || '待确认'],
+        ['建议动作', conclusion.action || '先运行 coverage 或导入结构化用量。'],
+        ['数据模式', localTrust.dataMode?.label || 'Unknown'],
+        ['Coverage gate', runtime.coverageGate?.status || 'not-run'],
+        ['Daily rows', formatInt(counts.dailyRows || 0)],
+        ['Session rows', formatInt(counts.sessionRows || 0)],
+        ['Token events', formatInt(counts.tokenEventRows || 0)],
+        ['总量校验', `${reconciliation.statusLabel || '未校验'} · ${reconciliation.note || ''}`]
+      ]
+    )
+  ];
+  const sources = Array.isArray(localTrust.sources) ? localTrust.sources : [];
+  if (sources.length) {
+    lines.push(
+      '',
+      table(
+        ['来源', '结论', '原因', 'Sessions', 'Events', 'Tokens'],
+        sources.slice(0, 10).map(row => [
+          row.label,
+          row.conclusion,
+          row.reason,
+          formatInt(row.sessions || 0),
+          formatInt(row.tokenEvents || 0),
+          compactCN(row.totalTokens || 0)
+        ])
+      )
+    );
+  }
+  return lines.join('\n');
+}
+
+function coverageToEvidenceTable({ localTrust, evidenceFlywheel, coverageBridge }) {
+  const evidence = localTrust?.evidence || {};
+  const quality = evidenceFlywheel?.quality || {};
+  return table(
+    ['环节', '数值', '说明'],
+    [
+      [
+        '已接入用量来源',
+        formatInt(evidence.coverageSourcesWithUsage ?? coverageBridge?.summary?.sourcesWithUsage ?? 0),
+        '有 session/event/daily 用量的来源数量。'
+      ],
+      [
+        '成功覆盖来源',
+        formatInt(evidence.successfulCoverageSources ?? coverageBridge?.summary?.successfulCoverage ?? 0),
+        '原生可信或 ccusage 导入且已有结构化 token。'
+      ],
+      [
+        '已识别项目',
+        formatInt(evidence.recognizedProjectCount ?? evidenceFlywheel?.totals?.recognizedProjectCount ?? 0),
+        '能够从别名、规则或路径尾部识别项目的范围。'
+      ],
+      [
+        '可直接写入证据',
+        formatInt(evidence.directWriteCount ?? quality.directWriteCount ?? 0),
+        '高置信自动证据；写入时不覆盖人工确认。'
+      ],
+      [
+        '待确认草稿',
+        formatInt(evidence.draftCount ?? quality.draftCount ?? 0),
+        '中低置信建议，只作为待确认，不包装成人工事实。'
+      ],
+      [
+        '不可写入',
+        formatInt(evidence.blockedCount ?? quality.blockedCount ?? 0),
+        '缺远程 URL、时间窗口或可靠 token 字段。'
+      ],
+      [
+        '人工确认',
+        formatInt(evidence.manualConfirmedCount ?? quality.manualConfirmedCount ?? 0),
+        '最高可信复盘证据。'
+      ]
+    ]
+  );
 }
 
 function statusRank(status) {

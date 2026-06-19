@@ -23,11 +23,12 @@ test('buildMarkdownReviewReport renders the fixed weekly review structure', () =
 
   assert.match(report, /^# Token Studio Weekly Review/);
   assert.match(report, /## 1\. 本期总览/);
-  assert.match(report, /## 2\. Coverage Bridge/);
-  assert.match(report, /## 3\. Evidence Flywheel/);
-  assert.match(report, /## 10\. 本周行动状态/);
-  assert.match(report, /## 12\. 口径说明/);
-  assert.match(report, /## 8\. 节省模拟/);
+  assert.match(report, /## 2\. Local Trust/);
+  assert.match(report, /## 3\. Coverage Bridge/);
+  assert.match(report, /## 4\. Evidence Flywheel/);
+  assert.match(report, /## 11\. 本周行动状态/);
+  assert.match(report, /## 13\. 口径说明/);
+  assert.match(report, /## 9\. 节省模拟/);
   assert.match(report, /官方公开 token 单价换算，不是供应商账单/);
   assert.match(report, /不读取、不导出对话正文/);
 });
@@ -53,6 +54,38 @@ test('buildMarkdownReviewReport includes coverage bridge and evidence flywheel s
         recommendedAction: '已有原生结构化 token 数据'
       }]
     },
+    localTrust: {
+      conclusion: {
+        decision: '当前真实 SQLite 有 event 级 token，并且 daily/session/event 总量可校验。',
+        action: '进入 Evidence Flywheel。'
+      },
+      dataMode: { label: 'Real DB - event verified' },
+      runtime: {
+        coverageGate: { status: 'passed' }
+      },
+      counts: { dailyRows: 1, sessionRows: 1, tokenEventRows: 1 },
+      reconciliation: {
+        statusLabel: '总量一致',
+        note: 'daily/session/event token 合计在可接受误差内。'
+      },
+      evidence: {
+        coverageSourcesWithUsage: 1,
+        successfulCoverageSources: 1,
+        recognizedProjectCount: 1,
+        directWriteCount: 1,
+        draftCount: 2,
+        blockedCount: 0,
+        manualConfirmedCount: 0
+      },
+      sources: [{
+        label: 'Codex CLI',
+        conclusion: '可用于 ROI 复盘',
+        reason: '已写入结构化 token。',
+        sessions: 1,
+        tokenEvents: 1,
+        totalTokens: 1000
+      }]
+    },
     evidenceFlywheel: {
       score: 50,
       completedSteps: 3,
@@ -75,8 +108,13 @@ test('buildMarkdownReviewReport includes coverage bridge and evidence flywheel s
   });
 
   assert.match(report, /原生可信采集 \| 2/);
+  assert.match(report, /## 2\. Local Trust/);
+  assert.match(report, /可信度结论 \| 当前真实 SQLite 有 event 级 token/);
+  assert.match(report, /Codex CLI \| 可用于 ROI 复盘/);
   assert.match(report, /Claude Code \| 原生可信采集/);
   assert.match(report, /飞轮进度 \| 50%/);
+  assert.match(report, /### Coverage-to-Evidence/);
+  assert.match(report, /待确认草稿 \| 2/);
   assert.match(report, /下一步：先确认最高成本草稿/);
 });
 

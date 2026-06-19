@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.6.1
+
+- Hardened non-public `/api/*` read routes so local data APIs require loopback requests and local browser Origin checks, matching the existing write-boundary posture.
+- Added a startup guard that refuses non-loopback `HOST` / `BIND_HOST` values unless `TOKEN_STUDIO_ALLOW_REMOTE=1` and `INGEST_TOKEN` are both set; remote mode does not open ordinary Dashboard APIs to remote clients.
+- Restricted the GitHub release gate token to `contents: read` only.
+- Local-only hardening milestone: this version is not published to npm in this stage.
+
+## 5.6.0
+
+- Added Local Trust Workbench metadata and Dashboard UI so users can see data mode, coverage gate, daily/session/event reconciliation, source failure reasons, and sanitized sample rows before making ROI claims.
+- Added `GET /api/local-trust` and `GET /api/local-trust/samples` as read-only trust inspection APIs; sample rows return only source/model/session/token/time metadata and do not expose prompt, response, transcript, diff, or full local paths.
+- Connected Coverage Bridge to Evidence Flywheel in the Markdown report, showing which sources have usage, how many projects are recognized, and how much evidence is direct-write, draft, blocked, or manually confirmed.
+- Upgraded review report copy material with Local Trust conclusions and Coverage-to-Evidence context for GitHub README, blog, and resume reuse.
+- Local-only milestone: this version is not published to npm in this stage.
+
 ## 5.3.0
 
 - Expanded Coverage Bridge into a workflow surface: source rows now show successful coverage, failure reasons, import reports, and copy-only ccusage JSON export / Token Studio bridge commands.

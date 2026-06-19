@@ -202,6 +202,7 @@ function ReviewDashboard({ rawData, onReloadData }) {
   , [savingsSimulation, sessions]);
   const evidenceFlywheel = rawData.meta?.evidenceFlywheel || null;
   const coverageBridge = rawData.meta?.coverageBridge || null;
+  const localTrust = rawData.meta?.localTrust || null;
 
   useEffect(() => {
     setAdvisorActions(rawData.advisorActions || []);
@@ -235,9 +236,10 @@ function ReviewDashboard({ rawData, onReloadData }) {
       advisorActions,
       actionMeasurements,
       coverageBridge,
-      evidenceFlywheel
+      evidenceFlywheel,
+      localTrust
     })
-  , [period, daily, sessions, rawData.workItems, roiAdvice, insights, savingsSimulation, advisorActions, actionMeasurements, coverageBridge, evidenceFlywheel]);
+  , [period, daily, sessions, rawData.workItems, roiAdvice, insights, savingsSimulation, advisorActions, actionMeasurements, coverageBridge, evidenceFlywheel, localTrust]);
   const persistAdvisorAction = useCallback(async (payload) => {
     const response = await fetch('/api/advisor-actions', {
       method: 'POST',
@@ -441,6 +443,7 @@ function ReviewDashboard({ rawData, onReloadData }) {
   const copyBlogMaterial = () => copyText(
     [
       `Token Studio ROI ${period.pretty || ''} 复盘：本期记录 ${sessions.length} 个 session、${U.compactCN(totals.total)} tokens，官方价换算 ${U.fmtUS.format(totals.cost)}。`,
+      `Local Trust 结论：${localTrust?.conclusion?.decision || '当前数据可信度待确认'}；${localTrust?.conclusion?.action || '先确认 coverage，再进入证据飞轮。'}`,
       `Coverage Bridge 显示 ${coverageBridge?.summary?.nativeTrusted || 0} 个来源可原生可信采集、${coverageBridge?.summary?.importable || 0} 个来源可通过 ccusage 导入；detected-only 不会被伪造成用量。`,
       `Evidence Flywheel 当前 ${evidenceFlywheel?.completedSteps || 0}/${evidenceFlywheel?.totalSteps || 6} 步完成，下一步是：${evidenceFlywheel?.nextAction || '继续补齐项目、任务、产出和模型策略证据'}。`,
       '所有成本都是官方公开 token 价格换算，不是供应商账单；报告不读取 prompt、response、transcript、diff 或完整路径。'
@@ -450,6 +453,7 @@ function ReviewDashboard({ rawData, onReloadData }) {
   const copyResumeMaterial = () => copyText(
     [
       '- Built Token Studio ROI, a local-first AI coding ROI review tool with event-level token collection, official-price cost conversion, privacy gates, and evidence-based review workflows.',
+      '- Added a Local Trust Workbench that explains data mode, coverage gate status, source failures, reconciliation, and sanitized sample rows before ROI conclusions.',
       '- Designed Coverage Bridge to distinguish native trusted collectors, ccusage import paths, detected-only tools, and unsupported sources without fabricating token usage.',
       '- Added Evidence Flywheel and rule-based Autopilot to turn local structured metadata into project attribution, output evidence, model policy samples, and weekly review actions without reading conversation content.'
     ].join('\n')

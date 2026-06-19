@@ -34,6 +34,7 @@ v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence
 
 - **Coverage Bridge Center**: separates sources into native trusted collection, ccusage importable, detected-only, and unsupported/no-token-field states so directory detection is not mistaken for real usage coverage.
 - **Coverage Bridge Workflow**: each source shows successful coverage, failure reasons, importable reports, and copy-only commands; the browser generates commands but never runs external scanners.
+- **Local Trust Workbench**: shows data mode, coverage gate, daily/session/event reconciliation, source failure reasons, and sanitized sample rows before making ROI claims.
 - **Evidence Flywheel**: connects real tokens, project identification, automatic evidence, confirmation drafts, output links, and model-strategy samples on `/review`.
 - **Evidence Quality Loop**: separates evidence into direct-write, confirmation draft, blocked, and manual-confirmed tiers; Savings Simulator and Model Strategy label evidence provenance.
 - **Evidence Autopilot**: on `/review`, generate high-confidence attribution, project aliases, output candidates, and model-strategy samples without calling an LLM, reading content, or overwriting manual labels.
@@ -49,6 +50,7 @@ v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence
 - **ROI Playbook Export**: `token-studio policy` exports Markdown, Claude Code, or AGENTS-style model-use snippets without editing project files.
 - **Advisor Action Loop**: turns Savings Simulator and ROI Advisor recommendations into open/done/dismissed actions and includes them in weekly Markdown reports.
 - **Advisor Action Measurement**: compares same-scope before/after token and official-price trends for review actions, without claiming causal savings.
+- **Review Report v3**: adds Local Trust, Coverage-to-Evidence, Action trend, GitHub README positioning, and blog-case-study material to Markdown weekly reports.
 - **Collector Audit**: audits experimental collectors before upgrading support, without SQLite writes or full-path output.
 - **Work Evidence**: connects usage to projects, tasks, stages, value, output links, and work items.
 
@@ -138,6 +140,7 @@ Token Studio cannot promise to reconstruct every historical token. It can only c
 - Model Policy / ROI Playbook export: generates Markdown, Claude Code, or AGENTS-style strategy snippets from local structured history without writing files.
 - ccusage Import Bridge: `token-studio import-usage --format=ccusage-json` imports saved structured JSON, and `--format=ccusage-cli` explicitly invokes ccusage CLI; both avoid conversation content and third-party cost estimates.
 - Source Health Center: the Dashboard and `/api/source-health` show support tier, detected status, recent import/collection summary, and token-field trust without leaking full local paths.
+- Local Trust Workbench: the Dashboard and `/api/local-trust` show data trust, coverage gate, daily/session/event reconciliation, source failure reasons, and sanitized sample rows.
 - Collection Coverage Gate: `token-studio coverage`, `GET /api/collection-coverage`, and the Dashboard collection-trust card show historical range, event/session/daily reconciliation, uncovered sources, and failure reasons.
 - Import / Budget Wizard: dashboard entry for ccusage JSON dry-run/apply, ccusage CLI Bridge command generation, and budget-window creation.
 - Quota Profiles v2: source-level custom token/cost guardrails with rolling/fixed windows, reset anchors, warning thresholds, and near/over/exceeded warnings.
@@ -202,7 +205,7 @@ Stable interfaces:
 - `POST /api/work-items/link-sessions`
 - `DELETE /api/work-items/:id`
 
-All local write APIs remain loopback-only, local-Origin-only, and JSON-only. The server does not trust `X-Forwarded-For` for local access checks.
+All non-public `/api/*` read APIs also require loopback requests and local Origin. All local write APIs remain loopback-only, local-Origin-only, and JSON-only. The server does not trust `X-Forwarded-For` for local access checks. By default the server binds only to `127.0.0.1`; `HOST=0.0.0.0` or any other non-loopback bind is refused unless `TOKEN_STUDIO_ALLOW_REMOTE=1` and `INGEST_TOKEN` are both set. That remote mode is reserved for explicit ingest scenarios and does not turn ordinary Dashboard APIs into remotely accessible APIs.
 
 ## Development
 
