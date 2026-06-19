@@ -17,6 +17,7 @@ export function buildMarkdownReviewReport({
   roiAdvice = [],
   savingsSimulation = null,
   advisorActions = [],
+  actionMeasurements = [],
   insights = [],
   coverageBridge = null,
   evidenceFlywheel = null,
@@ -235,6 +236,25 @@ export function buildMarkdownReviewReport({
     '',
     '说明：完成行动只表示复盘流程状态；报告只展示行动前后同类 token / 官方价趋势，不证明真实因果节省。',
     '',
+    actionMeasurements.length ? [
+      '### 行动前后趋势',
+      '',
+      table(
+        ['行动', '范围', 'Before tokens', 'After tokens', 'Delta tokens', 'Before $', 'After $', '说明'],
+        actionMeasurements.slice(0, 8).map(row => [
+          row.title,
+          row.scopeLabel,
+          compactCN(row.beforeTokens),
+          compactCN(row.afterTokens),
+          signedCompactCN(row.deltaTokens),
+          money(row.beforeCostUSD),
+          money(row.afterCostUSD),
+          row.caveat || '趋势对比不证明真实因果节省。'
+        ])
+      ),
+      ''
+    ].join('\n') : '',
+    '',
     '## 11. 下周行动清单',
     '',
     actionItems.length ? actionItems.map(item => `- ${safeText(item)}`).join('\n') : '- 保持当前模型和上下文使用策略，继续补充真实产出链接。',
@@ -415,6 +435,12 @@ function compactCN(value) {
   if (abs >= 1e8) return `${(v / 1e8).toFixed(2).replace(/\.?0+$/, '')} 亿`;
   if (abs >= 1e4) return `${(v / 1e4).toFixed(1).replace(/\.0$/, '')} 万`;
   return formatInt(v);
+}
+
+function signedCompactCN(value) {
+  const v = Number(value || 0);
+  if (v === 0) return '0';
+  return `${v > 0 ? '+' : ''}${compactCN(v)}`;
 }
 
 function formatInt(value) {

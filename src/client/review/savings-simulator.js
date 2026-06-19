@@ -56,6 +56,7 @@ export function buildSavingsSimulation({ sessions = [], daily = [], pricingMeta 
         simulatedCostUSD: 0,
         savingsUSD: 0,
         targetModels: new Map(),
+        evidenceCounts: new Map(),
         sampleSessions: []
       });
     }
@@ -68,13 +69,16 @@ export function buildSavingsSimulation({ sessions = [], daily = [], pricingMeta 
     target.simulatedCostUSD += simulated.costUSD;
     target.savingsUSD += currentCostUSD - simulated.costUSD;
     target.targetModels.set(simulated.model, simulated.label);
+    const evidenceLabel = evidenceQualityForRow(row);
+    target.evidenceCounts.set(evidenceLabel, (target.evidenceCounts.get(evidenceLabel) || 0) + 1);
     if (target.sampleSessions.length < 3) {
       target.sampleSessions.push({
         sessionId: row.sessionId || row.id || '',
         project: projectLabel(row),
         model: row.model || row.pricingModel || 'unknown',
         totalTokens: tokens.total,
-        costUSD: currentCostUSD
+        costUSD: currentCostUSD,
+        evidenceQuality: evidenceLabel
       });
     }
   }
@@ -95,6 +99,8 @@ export function buildSavingsSimulation({ sessions = [], daily = [], pricingMeta 
       savingsShare: row.currentCostUSD ? row.savingsUSD / row.currentCostUSD : 0,
       why: row.why,
       action: row.action,
+      evidenceQuality: dominantEvidenceQuality(row.evidenceCounts),
+      evidenceSummary: evidenceSummary(row.evidenceCounts),
       sampleSessions: row.sampleSessions,
       score: row.savingsUSD * 100 + row.totalTokens / 1000 + row.priority
     }))
@@ -235,6 +241,38 @@ function isExplorationOrValidation(row = {}) {
 
 function projectLabel(row = {}) {
   return row.projectAlias || row.projectPath || row.sessionId || row.source || 'unknown';
+}
+
+function evidenceQualityForRow(row = {}) {
+  if (row.annotationSource === 'manual' || row.annotationSource === 'imported') return '人工确认';
+  if (row.annotationSource === 'auto' && Number(row.annotationConfidence || 0) >= 80) return '自动高置信';
+  if (row.annotationSource === 'auto') return '待确认草稿';
+  if (
+    (row.taskType && row.taskType !== '未分类')
+    || (row.workPurpose && row.workPurpose !== '未说明')
+    || (row.workStage && row.workStage !== '未说明')
+    || (row.valueLevel && row.valueLevel !== '未评估')
+  ) return '待确认草稿';
+  return '缺证据';
+}
+
+function dominantEvidenceQuality(counts = new Map()) {
+  let best = '缺证据';
+  let bestCount = -1;
+  for (const [label, count] of counts.entries()) {
+    if (count > bestCount) {
+      best = label;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function evidenceSummary(counts = new Map()) {
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, count]) => `${label} ${count}`)
+    .join(' / ') || '缺证据';
 }
 
 function providerFromSource(source) {

@@ -20,6 +20,13 @@ export function buildCcusageBridgeCommand({ report = 'session', apply = false } 
   ].join(' ');
 }
 
+export function buildCcusageJsonExportCommand({ report = 'session' } = {}) {
+  const normalized = CCUSAGE_BRIDGE_REPORTS.includes(String(report).toLowerCase())
+    ? String(report).toLowerCase()
+    : 'session';
+  return `npx ccusage@latest ${normalized} --json --no-cost > ccusage-${normalized}.json`;
+}
+
 export function defaultResetAnchor(now = new Date()) {
   const date = new Date(now);
   date.setSeconds(0, 0);

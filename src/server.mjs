@@ -295,10 +295,18 @@ async function handleApi(req, url, res) {
     const runtime = runtimeMetadata();
     const sourceHealthRows = sourceHealth();
     const coverageBridge = buildCoverageBridge({ sourceHealth: sourceHealthRows });
+    const evidencePlan = buildEvidenceAutopilotPlan({
+      sessions: pricedSessions,
+      projectAliasRules: aliasRules,
+      period: 'all',
+      threshold: AUTO_ATTRIBUTION_THRESHOLD,
+      scanGit: false
+    });
     const evidenceFlywheel = buildEvidenceFlywheel({
       sessions: pricedSessions,
       workItems,
       advisorActions,
+      evidencePlan,
       coverageBridge
     });
 

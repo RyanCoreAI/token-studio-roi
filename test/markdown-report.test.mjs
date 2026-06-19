@@ -100,6 +100,35 @@ test('buildMarkdownReviewReport includes advisor action workflow status', () => 
   assert.match(report, /不证明真实因果节省/);
 });
 
+test('buildMarkdownReviewReport includes advisor action trend measurements without causality claims', () => {
+  const report = buildMarkdownReviewReport({
+    period,
+    advisorActions: [{
+      periodStart: '2026-06-01',
+      periodEnd: '2026-06-12',
+      status: 'done',
+      category: '节省模拟',
+      title: '探索默认轻量模型',
+      action: '测试验证先用轻量模型'
+    }],
+    actionMeasurements: [{
+      title: '探索默认轻量模型',
+      scopeLabel: '探索 / 验证 / 上下文整理',
+      beforeTokens: 1000,
+      afterTokens: 300,
+      deltaTokens: -700,
+      beforeCostUSD: 10,
+      afterCostUSD: 1,
+      caveat: '同类任务/模型趋势对比，不证明真实因果节省。'
+    }]
+  });
+
+  assert.match(report, /### 行动前后趋势/);
+  assert.match(report, /探索 \/ 验证 \/ 上下文整理/);
+  assert.match(report, /-700/);
+  assert.match(report, /不证明真实因果节省/);
+});
+
 test('buildMarkdownReviewReport includes unattributed work and advisor actions', () => {
   const report = buildMarkdownReviewReport({
     period,

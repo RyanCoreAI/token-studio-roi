@@ -89,7 +89,7 @@ test('buildModelStrategy builds a light mid heavy model playbook from annotation
   const heavy = strategy.playbook.find(row => row.id === 'heavy-review');
 
   assert.equal(light.label, '轻量默认');
-  assert.equal(light.evidenceState, '已观察');
+  assert.equal(light.evidenceState, '待确认草稿');
   assert.equal(light.sessionCount, 2);
   assert.equal(light.topModel, 'gpt-5.5');
   assert.equal(mid.label, '中模型实现');
@@ -97,6 +97,21 @@ test('buildModelStrategy builds a light mid heavy model playbook from annotation
   assert.equal(heavy.label, '重模型审查');
   assert.equal(heavy.sessionCount, 1);
   assert.match(heavy.action, /关键发布/);
+});
+
+test('buildModelStrategy labels manual and auto evidence provenance', () => {
+  const strategy = buildModelStrategy({
+    sessions: [
+      { ...sessions[0], annotationSource: 'auto', annotationConfidence: 88 },
+      { ...sessions[1], annotationSource: 'manual', annotationConfidence: 100 }
+    ]
+  });
+  const light = strategy.playbook.find(row => row.id === 'light-default');
+  const heavy = strategy.playbook.find(row => row.id === 'heavy-review');
+
+  assert.equal(light.evidenceState, '自动高置信');
+  assert.equal(heavy.evidenceState, '人工确认');
+  assert.equal(heavy.evidenceBreakdown.manual, 1);
 });
 
 test('buildModelStrategy emits model policy recommendations', () => {

@@ -29,10 +29,14 @@ test('v5 read APIs expose coverage bridge and evidence flywheel safely', async (
     const data = await getJson(port, '/api/data');
     assert.ok(data.meta.coverageBridge);
     assert.ok(data.meta.evidenceFlywheel);
+    assert.ok(data.meta.evidenceFlywheel.quality);
+    assert.ok(Array.isArray(data.meta.evidenceFlywheel.queues.confirmationDrafts));
+    assert.equal(JSON.stringify(data.meta.evidenceFlywheel).includes('D:\\HighROIProjects\\secret-project'), false);
 
     const coverage = await getJson(port, '/api/coverage-bridge');
     assert.equal(coverage.ok, true);
     assert.ok(coverage.coverageBridge.summary.totalSources >= 1);
+    assert.ok('successfulCoverage' in coverage.coverageBridge.summary);
 
     const flywheel = await getJson(port, '/api/evidence-flywheel?period=all');
     assert.equal(flywheel.ok, true);

@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.3.0
+
+- Expanded Coverage Bridge into a workflow surface: source rows now show successful coverage, failure reasons, import reports, and copy-only ccusage JSON export / Token Studio bridge commands.
+- Added Evidence Flywheel quality tiers for direct-write evidence, confirmation drafts, blocked evidence, and manual confirmation; `/api/data` now returns these derived tiers without scanning Git.
+- Marked Savings Simulator and Model Strategy recommendations with evidence provenance: manual confirmation, auto high-confidence, confirmation draft, or missing evidence.
+- Added Advisor Action Measurement: `/review` and Markdown reports now compare same-scope before/after token and official-price trends while explicitly avoiding causal savings claims.
+- Local-only milestone: this version is not published to npm in this stage.
+
 ## 5.0.0
 
 - Added Coverage Bridge Center metadata and UI so users can distinguish native trusted collection, ccusage import paths, detected-only tools, and unsupported/no-token-field sources.

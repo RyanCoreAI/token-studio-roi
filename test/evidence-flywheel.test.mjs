@@ -26,7 +26,32 @@ test('evidence flywheel turns structured session evidence into review progress',
     ],
     workItems: [{ id: 1 }],
     advisorActions: [{ status: 'open' }],
-    evidencePlan: { canApplyCount: 1, draftCount: 2 },
+    evidencePlan: {
+      canApplyCount: 1,
+      draftCount: 2,
+      suggestions: [
+        {
+          suggestionId: 'draft:1',
+          title: '待确认项目',
+          project: 'Token Studio',
+          confidence: 68,
+          canApply: false,
+          totalTokens: 3000,
+          costUSD: 1,
+          reason: '需要人工确认。'
+        },
+        {
+          suggestionId: 'blocked:1',
+          title: '缺远程 URL',
+          project: 'Token Studio',
+          confidence: 40,
+          canApply: false,
+          totalTokens: 2000,
+          costUSD: 0.5,
+          reason: 'D:\\private\\path 缺少 HTTPS remote。'
+        }
+      ]
+    },
     coverageBridge: { summary: { sourcesWithUsage: 1 } }
   });
 
@@ -38,6 +63,12 @@ test('evidence flywheel turns structured session evidence into review progress',
   assert.equal(flywheel.totals.openAdvisorActionCount, 1);
   assert.equal(flywheel.steps.find(step => step.id === 'real-token').complete, true);
   assert.equal(flywheel.queues.highCostGaps.length, 0);
+  assert.equal(flywheel.quality.directWriteCount, 1);
+  assert.equal(flywheel.quality.draftCount, 2);
+  assert.equal(flywheel.quality.blockedCount, 1);
+  assert.equal(flywheel.queues.confirmationDrafts.length, 1);
+  assert.equal(flywheel.queues.blockedEvidence.length, 1);
+  assert.equal(JSON.stringify(flywheel).includes('D:\\private'), false);
 });
 
 test('evidence flywheel queue rows hide full local paths', () => {

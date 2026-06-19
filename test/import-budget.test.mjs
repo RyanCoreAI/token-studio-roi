@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   applyBudgetTemplate,
   buildCcusageBridgeCommand,
+  buildCcusageJsonExportCommand,
   defaultResetAnchor
 } from '../src/client/dashboard/import-budget.js';
 
@@ -18,6 +19,17 @@ test('ccusage bridge command builder only emits explicit local CLI commands', ()
   assert.equal(
     buildCcusageBridgeCommand({ report: 'unknown' }),
     'npx token-studio import-usage --format=ccusage-cli --report=session --dry-run --yes'
+  );
+});
+
+test('ccusage JSON export command builder emits explicit saved JSON commands', () => {
+  assert.equal(
+    buildCcusageJsonExportCommand({ report: 'blocks' }),
+    'npx ccusage@latest blocks --json --no-cost > ccusage-blocks.json'
+  );
+  assert.equal(
+    buildCcusageJsonExportCommand({ report: 'unknown' }),
+    'npx ccusage@latest session --json --no-cost > ccusage-session.json'
   );
 });
 

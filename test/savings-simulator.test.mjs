@@ -20,6 +20,8 @@ test('savings simulator suggests downgrading heavy exploration and testing work'
       workStage: '验证',
       valueLevel: '中',
       outputStatus: '进行中',
+      annotationSource: 'auto',
+      annotationConfidence: 85,
       inputTokens: 900_000,
       outputTokens: 80_000,
       totalTokens: 980_000,
@@ -29,6 +31,8 @@ test('savings simulator suggests downgrading heavy exploration and testing work'
 
   assert.equal(simulation.suggestions.length, 1);
   assert.equal(simulation.suggestions[0].suggestedTier, 'light');
+  assert.equal(simulation.suggestions[0].evidenceQuality, '自动高置信');
+  assert.match(simulation.suggestions[0].evidenceSummary, /自动高置信/);
   assert.ok(simulation.suggestions[0].savingsUSD > 0);
   assert.match(simulation.suggestions[0].why, /方向|试错|重模型|最高成本|高单价/);
 });

@@ -1590,7 +1590,7 @@ button, input, select { font-family: inherit; color: inherit; }
 
 .source-health-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 10px;
 }
@@ -1736,6 +1736,35 @@ button, input, select { font-family: inherit; color: inherit; }
   color: var(--text-2);
   font-size: 11px;
   line-height: 1.42;
+}
+
+.source-health-recommendation strong {
+  color: var(--text);
+  font-size: 10.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.source-health-reports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.source-health-reports button {
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.source-health-reports button:hover {
+  border-color: var(--text);
+  color: var(--text);
 }
 
 .source-health-card code {
@@ -2935,6 +2964,16 @@ table.dt input[type="checkbox"] {
   align-items: end;
   justify-content: flex-start;
   padding-top: 22px;
+}
+
+.import-budget-note {
+  padding: 9px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--c-amber), transparent 92%);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 
 .budget-template-row {

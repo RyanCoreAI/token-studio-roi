@@ -30,6 +30,7 @@ import {
   CCUSAGE_BRIDGE_REPORTS,
   applyBudgetTemplate,
   buildCcusageBridgeCommand,
+  buildCcusageJsonExportCommand,
   defaultResetAnchor
 } from './import-budget.js';
 import { buildFirstRunState } from './onboarding.js';
@@ -1189,6 +1190,7 @@ function SourceHealthPanel({ rows = [], coverageBridge = null, onOpenImportBudge
         <SourceHealthStat label="ccusage 可导入" value={groups.importable} />
         <SourceHealthStat label="仅检测到" value={groups.detectedOnly} />
         <SourceHealthStat label="无 token 字段" value={groups.unsupported} />
+        <SourceHealthStat label="已接入用量" value={coverageBridge?.summary?.successfulCoverage ?? coverageBridge?.summary?.sourcesWithUsage ?? 0} />
       </div>
       <div className="source-health-grid">
         {visibleRows.map(row => (
@@ -1215,9 +1217,24 @@ function SourceHealthPanel({ rows = [], coverageBridge = null, onOpenImportBudge
               {row.lastRunMessage && <small>{row.lastRunMessage}</small>}
             </div>
             <div className="source-health-recommendation">
-              <span>推荐方式</span>
-              <p>{row.recommendedAction || row.recommendedImport || '先看 coverage，再决定是否原生采集或导入 ccusage JSON。'}</p>
+              <span>{row.workflow?.label || '推荐方式'}</span>
+              <p>{row.workflow?.reason || row.failureReason || row.recommendedAction || row.recommendedImport || '先看 coverage，再决定是否原生采集或导入 ccusage JSON。'}</p>
+              <strong>{row.workflow?.nextStep || row.recommendedAction || '先 dry-run，再确认写入。'}</strong>
             </div>
+            {Array.isArray(row.importReports) && row.importReports.length > 0 && (
+              <div className="source-health-reports">
+                {row.importReports.slice(0, 5).map(report => (
+                  <button
+                    key={report.report}
+                    type="button"
+                    onClick={onOpenImportBudget}
+                    title={report.exportCommand}
+                  >
+                    {report.report}
+                  </button>
+                ))}
+              </div>
+            )}
             <code>{row.commandHint}</code>
           </article>
         ))}
@@ -1354,6 +1371,7 @@ function ImportBudgetModal({
     report: bridgeReport,
     apply: bridgeMode === 'apply'
   });
+  const bridgeExportCommand = buildCcusageJsonExportCommand({ report: bridgeReport });
 
   const runImport = async (apply) => {
     setImportBusy(true);
@@ -1421,7 +1439,7 @@ function ImportBudgetModal({
   const canApply = canDryRun && importResult?.mode === 'dry-run' && !importResult.error;
   const copyBridgeCommand = async () => {
     try {
-      await navigator.clipboard?.writeText(bridgeCommand);
+      await navigator.clipboard?.writeText(`${bridgeExportCommand}\n${bridgeCommand}`);
       setBridgeCopied(true);
       window.setTimeout(() => setBridgeCopied(false), 1600);
     } catch {
@@ -1491,7 +1509,7 @@ function ImportBudgetModal({
             <div className="import-budget-section-head">
               <div>
                 <h4>ccusage CLI Bridge</h4>
-                <p>这里不从浏览器运行外部扫描器，只生成可复制命令。命令会显式调用 ccusage 输出 JSON，Token Studio 只接收结构化结果。</p>
+                <p>这里不从浏览器运行外部扫描器，只生成可复制命令。先用 ccusage 导出结构化 JSON，再粘贴到上方 dry-run；确认后才写入 SQLite。</p>
               </div>
               <span className="tag tag-soft">copy only</span>
             </div>
@@ -1511,13 +1529,20 @@ function ImportBudgetModal({
               </label>
               <div className="import-budget-actions import-budget-command-actions">
                 <button className="btn" type="button" onClick={copyBridgeCommand}>
-                  {bridgeCopied ? '已复制' : '复制命令'}
+                  {bridgeCopied ? '已复制' : '复制两条命令'}
                 </button>
               </div>
               <label className="form-field form-field-wide">
-                <span>复制到本地终端运行</span>
+                <span>1. 导出 ccusage JSON</span>
+                <textarea value={bridgeExportCommand} readOnly rows={2}/>
+              </label>
+              <label className="form-field form-field-wide">
+                <span>2. Token Studio bridge 命令</span>
                 <textarea value={bridgeCommand} readOnly rows={2}/>
               </label>
+              <div className="import-budget-note form-field-wide">
+                不采用 ccusage cost 字段；Token Studio 会重新按官方公开 token 价格换算。浏览器不会直接运行外部扫描器。
+              </div>
             </div>
           </section>
 

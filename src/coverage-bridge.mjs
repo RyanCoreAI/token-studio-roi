@@ -1,6 +1,7 @@
 const TRUSTED_NATIVE_STATUSES = new Set(['stable']);
 const IMPORT_BRIDGE_STATUSES = new Set(['import-only']);
 const DETECTED_ONLY_STATUSES = new Set(['detected-only', 'experimental']);
+const CCUSAGE_REPORTS = ['daily', 'weekly', 'monthly', 'session', 'blocks'];
 
 export function buildCoverageBridge({ sourceHealth = [] } = {}) {
   const rows = sourceHealth.map(row => {
@@ -8,6 +9,7 @@ export function buildCoverageBridge({ sourceHealth = [] } = {}) {
     const hasUsage = Number(row.sessions || 0) > 0
       || Number(row.tokenEvents || 0) > 0
       || Number(row.dailyRows || 0) > 0;
+    const failureReason = bridgeFailureReason(row, status, hasUsage);
     return {
       id: row.id,
       label: row.label,
@@ -15,15 +17,26 @@ export function buildCoverageBridge({ sourceHealth = [] } = {}) {
       statusLabel: statusLabel(status),
       detected: Boolean(row.detected),
       hasUsage,
+      successfulCoverage: isSuccessfulCoverage(status, hasUsage),
       sessions: Number(row.sessions || 0),
       tokenEvents: Number(row.tokenEvents || 0),
+      dailyRows: Number(row.dailyRows || 0),
       totalTokens: Number(row.totalTokens || 0),
       tokenReliability: row.tokenReliability || 'unknown',
       commandHint: row.commandHint || commandForStatus(status, row.id),
       recommendedAction: bridgeRecommendation(row, status),
       privacy: row.readsConversationContent ? '需要审计内容风险' : '不读取正文',
-      lastSeenAt: row.lastSeenAt || row.lastRunAt || null,
-      health: row.health || 'unknown'
+      lastSeenAt: row.lastSeenAt || row.lastRunAt || row.latestEventAt || row.latestSessionAt || row.latestDailyAt || null,
+      health: row.health || 'unknown',
+      failureReason,
+      workflow: bridgeWorkflow(row, status, hasUsage, failureReason),
+      importReports: importReportsFor(status),
+      usageSummary: {
+        sessions: Number(row.sessions || 0),
+        tokenEvents: Number(row.tokenEvents || 0),
+        dailyRows: Number(row.dailyRows || 0),
+        totalTokens: Number(row.totalTokens || 0)
+      }
     };
   });
   const summary = {
@@ -33,7 +46,9 @@ export function buildCoverageBridge({ sourceHealth = [] } = {}) {
     detectedOnly: rows.filter(row => row.status === 'detected-only').length,
     unsupported: rows.filter(row => row.status === 'unsupported').length,
     sourcesWithUsage: rows.filter(row => row.hasUsage).length,
-    totalTokens: rows.reduce((sum, row) => sum + row.totalTokens, 0)
+    successfulCoverage: rows.filter(row => row.successfulCoverage).length,
+    totalTokens: rows.reduce((sum, row) => sum + row.totalTokens, 0),
+    ccusageReports: CCUSAGE_REPORTS
   };
 
   return {
@@ -79,6 +94,69 @@ function bridgeRecommendation(row, status) {
     return '检测到工具痕迹但没有可靠 token 字段；不要把它当作已覆盖，优先用 ccusage bridge 补数据。';
   }
   return '当前没有可靠 token 字段或本机未检测到数据；等待上游记录 token 字段后再升级支持。';
+}
+
+function isSuccessfulCoverage(status, hasUsage) {
+  return hasUsage && (status === 'native-trusted' || status === 'ccusage-importable');
+}
+
+function bridgeFailureReason(row, status, hasUsage) {
+  if (hasUsage) return '';
+  if (row.health === 'last-run-error') return row.lastRunMessage || '上次采集或导入失败。';
+  if (status === 'native-trusted') return '本机未写入该来源的结构化 token，用 dry-run 检查候选文件和 token 字段。';
+  if (status === 'ccusage-importable') return '尚未导入 ccusage 结构化 JSON。';
+  if (status === 'detected-only') return '检测到工具痕迹，但 Token Studio 没有可靠 token 字段可写入。';
+  return '未检测到本机数据，或上游没有公开稳定 token 字段。';
+}
+
+function bridgeWorkflow(row, status, hasUsage, failureReason) {
+  if (isSuccessfulCoverage(status, hasUsage)) {
+    return {
+      state: 'covered',
+      label: '已接入用量',
+      nextStep: '去 /review 查看证据飞轮和模型策略。',
+      reason: ''
+    };
+  }
+  if (status === 'native-trusted') {
+    return {
+      state: 'native-dry-run',
+      label: '先做原生 dry-run',
+      nextStep: row.commandHint || commandForStatus(status, row.id),
+      reason: failureReason
+    };
+  }
+  if (status === 'ccusage-importable') {
+    return {
+      state: 'import-json',
+      label: '导入 ccusage JSON',
+      nextStep: '选择 report，运行命令后粘贴 JSON dry-run，确认后再 apply。',
+      reason: failureReason
+    };
+  }
+  if (status === 'detected-only') {
+    return {
+      state: 'bridge-recommended',
+      label: '建议用 ccusage bridge',
+      nextStep: '如果 ccusage 支持该工具，先导出 JSON，再由 Token Studio 预检导入。',
+      reason: failureReason
+    };
+  }
+  return {
+    state: 'unsupported',
+    label: '暂不写入用量',
+    nextStep: '等待上游写出稳定 token 字段，或通过显式结构化 JSON 导入。',
+    reason: failureReason
+  };
+}
+
+function importReportsFor(status) {
+  if (!['ccusage-importable', 'detected-only'].includes(status)) return [];
+  return CCUSAGE_REPORTS.map(report => ({
+    report,
+    exportCommand: `npx ccusage@latest ${report} --json --no-cost > ccusage-${report}.json`,
+    tokenStudioCommand: `npx token-studio import-usage --format=ccusage-cli --report=${report} --dry-run --yes`
+  }));
 }
 
 function commandForStatus(status, id) {

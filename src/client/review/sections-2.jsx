@@ -158,6 +158,7 @@ function EvidenceFlywheelSection({
   if (!flywheel) return null;
   const steps = flywheel.steps || [];
   const queues = flywheel.queues || {};
+  const qualityRows = flywheel.quality?.rows || [];
   return (
     <section className="story flywheel-section">
       <div className="section-label">02 · 证据飞轮</div>
@@ -174,6 +175,18 @@ function EvidenceFlywheelSection({
           <span style={{width: `${Math.max(0, Math.min(100, flywheel.score || 0))}%`}}/>
         </div>
       </div>
+
+      {qualityRows.length > 0 && (
+        <div className="flywheel-quality-grid">
+          {qualityRows.map(row => (
+            <article key={row.id} className={`flywheel-quality-card tone-${row.tone}`}>
+              <span>{row.label}</span>
+              <strong>{row.count}</strong>
+              <p>{row.detail}</p>
+            </article>
+          ))}
+        </div>
+      )}
 
       <div className="flywheel-steps">
         {steps.map(step => (
@@ -194,8 +207,10 @@ function EvidenceFlywheelSection({
 
       <div className="flywheel-queues">
         <FlywheelQueue title="最值得补的证据" rows={queues.highCostGaps || []} />
+        <FlywheelQueue title="待确认草稿" rows={queues.confirmationDrafts || []} />
         <FlywheelQueue title="产出链接候选" rows={queues.outputCandidates || []} />
         <FlywheelQueue title="模型策略样本缺口" rows={queues.strategyCandidates || []} />
+        <FlywheelQueue title="不可写入原因" rows={queues.blockedEvidence || []} />
       </div>
 
       <EvidenceAutopilotPanel
@@ -220,7 +235,8 @@ function FlywheelQueue({ title, rows = [] }) {
           <span>{String(index + 1).padStart(2, '0')}</span>
           <div>
             <strong>{row.project || '未识别项目'}</strong>
-            <p>{row.model || row.source || 'unknown'} · {Array.isArray(row.missing) && row.missing.length ? `缺 ${row.missing.join('、')}` : row.sessionId || '待确认'}</p>
+            <p>{row.model || row.source || 'unknown'} · {Array.isArray(row.missing) && row.missing.length ? `缺 ${row.missing.join('、')}` : row.reason || row.sessionId || '待确认'}</p>
+            {row.confidence ? <small>{row.provenance || '建议'} · {Math.round(row.confidence)}%</small> : null}
           </div>
           <b>{row.costUSD > 0 ? U.fmtUS.format(row.costUSD) : U.compactCN(row.totalTokens || 0)}</b>
         </div>
@@ -635,10 +651,13 @@ function SavingsSimulatorSection({
                   <SavingsMetric label="Tokens" value={U.compactCN(item.totalTokens)} />
                   <SavingsMetric label="当前官方价" value={U.fmtUS4.format(item.currentCostUSD)} />
                   <SavingsMetric label="模拟后" value={U.fmtUS4.format(item.simulatedCostUSD)} />
+                  <SavingsMetric label="证据来源" value={item.evidenceQuality || '缺证据'} />
                 </div>
                 <div className="savings-detail">
                   <span>为什么</span>
                   <p>{item.why}</p>
+                  <span>证据口径</span>
+                  <p>{item.evidenceSummary || item.evidenceQuality || '缺证据'}；自动证据不等同人工确认。</p>
                   <span>建议动作</span>
                   <p>{item.action}</p>
                   <span>参考模型</span>
@@ -651,7 +670,7 @@ function SavingsSimulatorSection({
                     category: '节省模拟',
                     title: item.title,
                     action: item.action,
-                    evidence: `${item.sessionCount} sessions · ${U.compactCN(item.totalTokens)} tokens · 可节省 ${U.fmtUS4.format(item.savingsUSD)}`
+                    evidence: `${item.sessionCount} sessions · ${U.compactCN(item.totalTokens)} tokens · 可节省 ${U.fmtUS4.format(item.savingsUSD)} · 证据 ${item.evidenceSummary || item.evidenceQuality || '缺证据'}`
                   })}
                   onSetStatus={onSetActionStatus}
                 />
@@ -840,7 +859,7 @@ function AdvisorActionControls({ existing, onAdd, onSetStatus }) {
   );
 }
 
-function AdvisorActionSummarySection({ actions = [], period, onSetActionStatus }) {
+function AdvisorActionSummarySection({ actions = [], measurements = [], period, onSetActionStatus }) {
   const [busyId, setBusyId] = useState(null);
   const counts = useMemo(() => ({
     open: actions.filter(action => action.status === 'open').length,
@@ -919,6 +938,46 @@ function AdvisorActionSummarySection({ actions = [], period, onSetActionStatus }
           导出行动清单 Markdown
         </button>
       </div>
+
+      {measurements.length > 0 && (
+        <div className="action-measurement-panel">
+          <div className="action-measurement-head">
+            <div>
+              <span>行动前后趋势</span>
+              <h3>同类 token 是否正在下降</h3>
+            </div>
+            <p>趋势对比不证明真实因果节省，只帮助下周复盘策略是否值得继续。</p>
+          </div>
+          <div className="action-measurement-list">
+            {measurements.slice(0, 5).map(row => (
+              <article key={row.id || row.title} className="action-measurement-card">
+                <div>
+                  <span>{row.scopeLabel}</span>
+                  <strong>{row.title}</strong>
+                  <p>{row.caveat}</p>
+                </div>
+                <div className="action-measurement-metrics">
+                  <div>
+                    <span>Before</span>
+                    <b>{U.compactCN(row.beforeTokens)}</b>
+                    <small>{row.beforeCostUSD > 0 ? U.fmtUS.format(row.beforeCostUSD) : '—'}</small>
+                  </div>
+                  <div>
+                    <span>After</span>
+                    <b>{U.compactCN(row.afterTokens)}</b>
+                    <small>{row.afterCostUSD > 0 ? U.fmtUS.format(row.afterCostUSD) : '—'}</small>
+                  </div>
+                  <div>
+                    <span>Delta</span>
+                    <b>{row.deltaTokens >= 0 ? '+' : ''}{U.compactCN(row.deltaTokens)}</b>
+                    <small>{row.deltaCostUSD >= 0 ? '+' : ''}{U.fmtUS.format(row.deltaCostUSD)}</small>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
 
       {ordered.length ? (
         <div className="action-summary-list">

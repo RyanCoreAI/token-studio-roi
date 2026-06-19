@@ -33,7 +33,9 @@ See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller compet
 v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence Flywheel make it clear whether data exists, where it came from, and whether it is enough for ROI decisions. This stage is local-source only; npm publication is a separate decision.
 
 - **Coverage Bridge Center**: separates sources into native trusted collection, ccusage importable, detected-only, and unsupported/no-token-field states so directory detection is not mistaken for real usage coverage.
+- **Coverage Bridge Workflow**: each source shows successful coverage, failure reasons, importable reports, and copy-only commands; the browser generates commands but never runs external scanners.
 - **Evidence Flywheel**: connects real tokens, project identification, automatic evidence, confirmation drafts, output links, and model-strategy samples on `/review`.
+- **Evidence Quality Loop**: separates evidence into direct-write, confirmation draft, blocked, and manual-confirmed tiers; Savings Simulator and Model Strategy label evidence provenance.
 - **Evidence Autopilot**: on `/review`, generate high-confidence attribution, project aliases, output candidates, and model-strategy samples without calling an LLM, reading content, or overwriting manual labels.
 - **Git metadata output candidates**: reads only repo name, remote host, commit hash, and commit time; output links are written only when an HTTPS commit URL can be generated, with no diff or file-content reads.
 - **ROI Savings Simulator**: compares official-price model switching scenarios for exploration, testing, context prep, low-value, and abandoned work.
@@ -46,6 +48,7 @@ v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence
 - **Statusline Guardrails**: `token-studio statusline` prints recent-window tokens, burn rate, cache, budget usage, unpriced-model warnings, and open actions for terminal prompts, tmux, or Claude Code statusline.
 - **ROI Playbook Export**: `token-studio policy` exports Markdown, Claude Code, or AGENTS-style model-use snippets without editing project files.
 - **Advisor Action Loop**: turns Savings Simulator and ROI Advisor recommendations into open/done/dismissed actions and includes them in weekly Markdown reports.
+- **Advisor Action Measurement**: compares same-scope before/after token and official-price trends for review actions, without claiming causal savings.
 - **Collector Audit**: audits experimental collectors before upgrading support, without SQLite writes or full-path output.
 - **Work Evidence**: connects usage to projects, tasks, stages, value, output links, and work items.
 

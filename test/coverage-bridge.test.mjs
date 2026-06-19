@@ -43,7 +43,16 @@ test('coverage bridge separates native trusted, importable, detected-only and un
   assert.equal(bridge.summary.detectedOnly, 1);
   assert.equal(bridge.summary.unsupported, 1);
   assert.equal(bridge.summary.sourcesWithUsage, 1);
+  assert.equal(bridge.summary.successfulCoverage, 1);
+  assert.deepEqual(bridge.summary.ccusageReports, ['daily', 'weekly', 'monthly', 'session', 'blocks']);
   assert.equal(bridge.rows.find(row => row.id === 'claude').statusLabel, '原生可信采集');
+  assert.equal(bridge.rows.find(row => row.id === 'claude').successfulCoverage, true);
   assert.equal(bridge.rows.find(row => row.id === 'ccusage').statusLabel, 'ccusage 可导入');
+  assert.equal(bridge.rows.find(row => row.id === 'ccusage').workflow.state, 'import-json');
+  assert.equal(bridge.rows.find(row => row.id === 'ccusage').importReports.length, 5);
+  assert.match(bridge.rows.find(row => row.id === 'ccusage').importReports[0].exportCommand, /ccusage@latest daily --json --no-cost/);
   assert.match(bridge.rows.find(row => row.id === 'cursor').recommendedAction, /不要把它当作已覆盖/);
+  assert.equal(bridge.rows.find(row => row.id === 'cursor').successfulCoverage, false);
+  assert.equal(bridge.rows.find(row => row.id === 'cursor').workflow.state, 'bridge-recommended');
+  assert.match(bridge.rows.find(row => row.id === 'cursor').failureReason, /可靠 token 字段/);
 });

@@ -163,9 +163,29 @@ function buildModelPolicyRows(sessions) {
       costUSD: aggregate.costUSD,
       topModel: top?.model || '待标注验证',
       observedTier: top?.tier || 'unknown',
-      evidenceState: aggregate.sessionCount ? '已观察' : '待标注验证'
+      evidenceState: modelEvidenceState(matching),
+      evidenceBreakdown: modelEvidenceBreakdown(matching)
     };
   });
+}
+
+function modelEvidenceState(sessions = []) {
+  if (!sessions.length) return '待标注验证';
+  const breakdown = modelEvidenceBreakdown(sessions);
+  if (breakdown.manual >= Math.ceil(sessions.length / 2)) return '人工确认';
+  if (breakdown.autoHigh >= Math.ceil(sessions.length / 2)) return '自动高置信';
+  if (breakdown.autoLow > 0 || breakdown.draft > 0) return '待确认草稿';
+  return '缺证据';
+}
+
+function modelEvidenceBreakdown(sessions = []) {
+  return sessions.reduce((acc, session) => {
+    if (session.annotationSource === 'manual' || session.annotationSource === 'imported') acc.manual += 1;
+    else if (session.annotationSource === 'auto' && Number(session.annotationConfidence || 0) >= 80) acc.autoHigh += 1;
+    else if (session.annotationSource === 'auto') acc.autoLow += 1;
+    else acc.draft += 1;
+    return acc;
+  }, { manual: 0, autoHigh: 0, autoLow: 0, draft: 0 });
 }
 
 function isLightPolicyWork(session = {}) {

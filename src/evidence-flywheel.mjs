@@ -22,6 +22,14 @@ export function buildEvidenceFlywheel({
   const strategySessions = sessions.filter(hasStrategyEvidence);
   const draftCount = Number(evidencePlan?.draftCount || 0);
   const applicableCount = Number(evidencePlan?.canApplyCount || 0);
+  const suggestionRows = Array.isArray(evidencePlan?.suggestions) ? evidencePlan.suggestions : [];
+  const quality = buildQualitySummary({
+    sessions,
+    evidencePlan,
+    manualEvidence,
+    autoEvidence,
+    suggestionRows
+  });
   const openActions = advisorActions.filter(action => (action.status || 'open') === 'open').length;
 
   const steps = [
@@ -53,8 +61,19 @@ export function buildEvidenceFlywheel({
       openAdvisorActionCount: openActions,
       coverageSourcesWithUsage: coverageBridge?.summary?.sourcesWithUsage || 0
     },
+    quality,
     queues: {
       highCostGaps: highCostGaps(sessions).slice(0, 10),
+      confirmationDrafts: suggestionRows
+        .filter(item => !item.canApply && Number(item.confidence || 0) >= 60)
+        .sort(compareSuggestionEvidence)
+        .slice(0, 10)
+        .map(toSuggestionQueueRow),
+      blockedEvidence: suggestionRows
+        .filter(item => !item.canApply && Number(item.confidence || 0) < 60)
+        .sort(compareSuggestionEvidence)
+        .slice(0, 10)
+        .map(toSuggestionQueueRow),
       outputCandidates: sessions
         .filter(session => !hasOutputEvidence(session) && isProductive(session))
         .sort(compareCostThenTokens)
@@ -68,6 +87,51 @@ export function buildEvidenceFlywheel({
     },
     nextAction,
     note: 'Evidence Flywheel is derived from local structured metadata, annotations, output links, and Evidence Autopilot suggestions. It does not read conversation content.'
+  };
+}
+
+function buildQualitySummary({ sessions, evidencePlan, manualEvidence, autoEvidence, suggestionRows }) {
+  const directWriteCount = Number(evidencePlan?.canApplyCount || 0);
+  const draftCount = Number(evidencePlan?.draftCount || 0);
+  const blockedCount = suggestionRows.filter(item => !item.canApply && Number(item.confidence || 0) < 60).length;
+  const missingCount = Math.max(0, sessions.length - manualEvidence.length - autoEvidence.length);
+  return {
+    directWriteCount,
+    draftCount,
+    blockedCount,
+    manualConfirmedCount: manualEvidence.length,
+    autoHighConfidenceCount: autoEvidence.length,
+    missingCount,
+    rows: [
+      {
+        id: 'direct-write',
+        label: '可直接写入',
+        count: directWriteCount,
+        tone: 'good',
+        detail: '高置信自动证据；写入时仍不会覆盖人工确认。'
+      },
+      {
+        id: 'draft',
+        label: '待确认草稿',
+        count: draftCount,
+        tone: 'warn',
+        detail: '中低置信推断，只进队列等待确认，不作为事实。'
+      },
+      {
+        id: 'blocked',
+        label: '不可写入',
+        count: blockedCount,
+        tone: 'risk',
+        detail: '缺远程 URL、时间窗口或可靠字段时，只说明原因。'
+      },
+      {
+        id: 'manual',
+        label: '人工确认',
+        count: manualEvidence.length,
+        tone: 'manual',
+        detail: '最高可信证据；自动归因永远不覆盖。'
+      }
+    ]
   };
 }
 
@@ -149,6 +213,26 @@ function toQueueRow(session = {}) {
   };
 }
 
+function toSuggestionQueueRow(item = {}) {
+  return {
+    suggestionId: clean(item.suggestionId),
+    kind: clean(item.kind),
+    category: clean(item.category),
+    provenance: clean(item.provenance),
+    title: safeText(item.title || item.category || '证据建议'),
+    project: safeText(item.project || '未识别项目'),
+    source: clean(item.source),
+    model: clean(item.model),
+    sessionId: safeSession(item.sessionId),
+    totalTokens: Number(item.totalTokens || 0),
+    costUSD: Number(item.costUSD || 0),
+    confidence: Number(item.confidence || 0),
+    canApply: Boolean(item.canApply),
+    reason: safeText(item.reason || item.action || '缺少可写入证据。'),
+    fields: Array.isArray(item.fields) ? item.fields.map(clean).filter(Boolean) : []
+  };
+}
+
 function missingFields(session = {}) {
   const fields = [];
   if (!clean(session.projectAlias)) fields.push('项目');
@@ -172,6 +256,12 @@ function uniqueProjectCount(sessions) {
 function compareCostThenTokens(a, b) {
   return Number(b.costUSD || 0) - Number(a.costUSD || 0)
     || Number(b.totalTokens || 0) - Number(a.totalTokens || 0);
+}
+
+function compareSuggestionEvidence(a, b) {
+  return Number(b.costUSD || 0) - Number(a.costUSD || 0)
+    || Number(b.totalTokens || 0) - Number(a.totalTokens || 0)
+    || Number(b.confidence || 0) - Number(a.confidence || 0);
 }
 
 function safeProject(session = {}) {
@@ -209,4 +299,11 @@ function projectTail(value) {
 
 function clean(value) {
   return String(value ?? '').trim();
+}
+
+function safeText(value) {
+  const text = clean(value)
+    .replace(/[A-Za-z]:[\\/][^\s，。；;]+/gu, '[local-path]')
+    .replace(/\/(?:Users|home|mnt|private|var)\/[^\s，。；;]+/gu, '[local-path]');
+  return text.length > 220 ? `${text.slice(0, 217)}...` : text;
 }

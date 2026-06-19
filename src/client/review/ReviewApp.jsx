@@ -15,6 +15,7 @@ import { buildRoiEvidence } from './roi-evidence.js';
 import { buildSavingsSimulation } from './savings-simulator.js';
 import { buildReviewTrustState } from './review-trust.js';
 import { buildEvidenceZeroState, buildSavingsEmptyReason } from './review-empty-states.js';
+import { buildAdvisorActionMeasurements } from './action-measurement.js';
 import './styles.css';
 
 function formatApiConnectionError(error, action = '请求') {
@@ -201,20 +202,6 @@ function ReviewDashboard({ rawData, onReloadData }) {
   , [savingsSimulation, sessions]);
   const evidenceFlywheel = rawData.meta?.evidenceFlywheel || null;
   const coverageBridge = rawData.meta?.coverageBridge || null;
-  const markdownReport = useMemo(() =>
-    buildMarkdownReviewReport({
-      period,
-      daily,
-      sessions,
-      workItems: rawData.workItems || [],
-      roiAdvice,
-      insights,
-      savingsSimulation,
-      advisorActions,
-      coverageBridge,
-      evidenceFlywheel
-    })
-  , [period, daily, sessions, rawData.workItems, roiAdvice, insights, savingsSimulation, advisorActions, coverageBridge, evidenceFlywheel]);
 
   useEffect(() => {
     setAdvisorActions(rawData.advisorActions || []);
@@ -232,7 +219,25 @@ function ReviewDashboard({ rawData, onReloadData }) {
   const periodAdvisorActions = useMemo(() =>
     advisorActions.filter(action => action.periodStart === period.start && action.periodEnd === period.end)
   , [advisorActions, period]);
+  const actionMeasurements = useMemo(() =>
+    buildAdvisorActionMeasurements({ actions: periodAdvisorActions, sessions, period })
+  , [periodAdvisorActions, sessions, period]);
 
+  const markdownReport = useMemo(() =>
+    buildMarkdownReviewReport({
+      period,
+      daily,
+      sessions,
+      workItems: rawData.workItems || [],
+      roiAdvice,
+      insights,
+      savingsSimulation,
+      advisorActions,
+      actionMeasurements,
+      coverageBridge,
+      evidenceFlywheel
+    })
+  , [period, daily, sessions, rawData.workItems, roiAdvice, insights, savingsSimulation, advisorActions, actionMeasurements, coverageBridge, evidenceFlywheel]);
   const persistAdvisorAction = useCallback(async (payload) => {
     const response = await fetch('/api/advisor-actions', {
       method: 'POST',
@@ -562,6 +567,7 @@ function ReviewDashboard({ rawData, onReloadData }) {
       className: 'page',
       content: <AdvisorActionSummarySection
         actions={periodAdvisorActions}
+        measurements={actionMeasurements}
         period={period}
         onSetActionStatus={setAdvisorActionStatus}
       />
@@ -586,7 +592,7 @@ function ReviewDashboard({ rawData, onReloadData }) {
       className: 'page',
       content: <InsightsSection insights={insights}/>
     }
-  ], [period, totals, prevTotals, heroStats, trustState, evidenceFlywheel, roiEvidence, evidenceZeroState, lazyAttributionState, applyLazyAttribution, evidenceAutopilotState, runEvidenceAutopilot, applyEvidenceSuggestion, dismissEvidenceSuggestion, closureProgress, rawData.meta, daily, roiAdvice, savingsSimulation, savingsEmptyReason, modelStrategy, insights, actionsByRule, periodAdvisorActions, addAdvisorAction, setAdvisorActionStatus]);
+  ], [period, totals, prevTotals, heroStats, trustState, evidenceFlywheel, roiEvidence, evidenceZeroState, lazyAttributionState, applyLazyAttribution, evidenceAutopilotState, runEvidenceAutopilot, applyEvidenceSuggestion, dismissEvidenceSuggestion, closureProgress, rawData.meta, daily, roiAdvice, savingsSimulation, savingsEmptyReason, modelStrategy, insights, actionsByRule, periodAdvisorActions, actionMeasurements, addAdvisorAction, setAdvisorActionStatus]);
 
   const goToReviewPage = useCallback((index) => {
     const nextIndex = Math.max(0, Math.min(reviewPages.length - 1, index));
