@@ -439,6 +439,16 @@ function coverageToEvidenceTable({ localTrust, evidenceFlywheel, coverageBridge 
         '原生可信或 ccusage 导入且已有结构化 token。'
       ],
       [
+        '可信来源 session',
+        formatInt(evidence.trustedSessionCount ?? 0),
+        '来自已通过 coverage / 导入验收的来源，可进入证据队列。'
+      ],
+      [
+        '可信来源 token',
+        compactCN(evidence.trustedTokenTotal ?? 0),
+        '默认按官方价和 token 降序，优先处理最高价值 10 条证据缺口。'
+      ],
+      [
         '已识别项目',
         formatInt(evidence.recognizedProjectCount ?? evidenceFlywheel?.totals?.recognizedProjectCount ?? 0),
         '能够从别名、规则或路径尾部识别项目的范围。'

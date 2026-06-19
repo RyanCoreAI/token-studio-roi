@@ -34,6 +34,7 @@ import {
   defaultResetAnchor
 } from './import-budget.js';
 import { buildFirstRunState } from './onboarding.js';
+import { buildTrustEvidenceQueue } from './trust-evidence-queue.js';
 import './styles.css';
 
 function formatApiConnectionError(error, action = '请求') {
@@ -345,7 +346,12 @@ export function App({ routeMode = 'dashboard' }) {
       .then(async r => {
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
-        if (payload.apply) await loadData();
+        if (payload.apply) {
+          await loadData();
+          if (window.location.pathname !== '/trust') {
+            window.location.assign('/trust?imported=1');
+          }
+        }
         return data;
       });
   }, [loadData]);
@@ -534,6 +540,14 @@ function Dashboard({
   const [autoAttributionMessage, setAutoAttributionMessage] = useState(null);
   const [lastAutoRunId, setLastAutoRunId] = useState(null);
   const [importBudgetOpen, setImportBudgetOpen] = useState(false);
+  const [trustEvidenceState, setTrustEvidenceState] = useState({
+    busy: false,
+    applyingId: null,
+    plan: null,
+    queue: null,
+    message: null,
+    error: null
+  });
 
   // Build option lists
   const allSources = useMemo(() => Array.from(new Set(M.daily.map(r => r.source))), [M.daily]);
@@ -707,6 +721,68 @@ function Dashboard({
     }
   };
 
+  const loadTrustEvidenceQueue = useCallback(async () => {
+    setTrustEvidenceState(prev => ({ ...prev, busy: true, error: null, message: null }));
+    try {
+      const response = await fetch('/api/evidence-suggestions?period=all');
+      const plan = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(plan.error || `HTTP ${response.status}`);
+      const queue = buildTrustEvidenceQueue({
+        trust: M.meta?.localTrust,
+        evidencePlan: plan,
+        limit: 10
+      });
+      setTrustEvidenceState(prev => ({
+        ...prev,
+        busy: false,
+        plan,
+        queue,
+        message: queue.rows.length
+          ? `已生成 ${queue.rows.length} 条可信证据候选`
+          : queue.nextAction,
+        error: null
+      }));
+      return queue;
+    } catch (error) {
+      setTrustEvidenceState(prev => ({
+        ...prev,
+        busy: false,
+        error: formatApiConnectionError(error, '生成证据队列'),
+        message: null
+      }));
+      return null;
+    }
+  }, [M.meta?.localTrust]);
+
+  const applyTrustEvidenceSuggestion = useCallback(async (suggestionId) => {
+    if (!suggestionId) return;
+    setTrustEvidenceState(prev => ({ ...prev, applyingId: suggestionId, error: null, message: null }));
+    try {
+      const response = await fetch('/api/evidence-suggestions/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period: 'all', suggestionIds: [suggestionId] })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      await onRefresh();
+      setTrustEvidenceState(prev => ({
+        ...prev,
+        applyingId: null,
+        message: `已写入 ${Number(result.appliedAnnotations || 0) + Number(result.appliedOutputs || 0)} 条自动证据`,
+        error: null
+      }));
+      await loadTrustEvidenceQueue();
+    } catch (error) {
+      setTrustEvidenceState(prev => ({
+        ...prev,
+        applyingId: null,
+        error: formatApiConnectionError(error, '写入证据建议'),
+        message: null
+      }));
+    }
+  }, [loadTrustEvidenceQueue, onRefresh]);
+
   // ───── Export ─────
   const onExportAll = () => {
     U.downloadCSV(`tokens-daily-${filters.startDate}-${filters.endDate}.csv`, filtered, [
@@ -802,6 +878,12 @@ function Dashboard({
         trust={M.meta?.localTrust}
         onRunCoverage={onLoadCollectionCoverage}
         onOpenImportBudget={() => setImportBudgetOpen(true)} />
+
+      <TrustEvidenceQueuePanel
+        state={trustEvidenceState}
+        trust={M.meta?.localTrust}
+        onGenerate={loadTrustEvidenceQueue}
+        onApply={applyTrustEvidenceSuggestion} />
 
       {trustOnly ? (
         <>
@@ -1261,6 +1343,102 @@ function LocalTrustWorkbenchPanel({ trust, onRunCoverage, onOpenImportBudget }) 
         <strong>下一步：</strong>
         <span>{conclusion.action || evidence.nextAction || '先确认 coverage，再进入 /review 生成复盘证据。'}</span>
       </div>
+    </section>
+  );
+}
+
+function TrustEvidenceQueuePanel({ state, trust, onGenerate, onApply }) {
+  const queue = state.queue;
+  const rows = queue?.rows || [];
+  const trustConclusion = trust?.conclusion || {};
+  const canReview = Boolean(trustConclusion.canUseForRoiReview);
+
+  return (
+    <section className="trust-evidence-panel" aria-label="可信证据队列">
+      <div className="trust-evidence-head">
+        <div>
+          <div className="eyebrow">Trust-to-Evidence Autopilot</div>
+          <h2>把可信 token 变成待处理证据队列</h2>
+          <p>只从可信来源 session 里挑最高价值的 10 条，按官方价和 token 降序；自动建议带置信度和原因，不覆盖人工确认。</p>
+        </div>
+        <div className="trust-evidence-actions">
+          <span className={`trust-badge ${canReview ? 'trust-badge-trusted' : 'trust-badge-needs-coverage'}`}>
+            {canReview ? '可信来源可复盘' : '先确认可信来源'}
+          </span>
+          <button className="btn btn-primary" onClick={onGenerate} disabled={state.busy}>
+            {state.busy ? '生成中' : '生成证据队列'}
+          </button>
+        </div>
+      </div>
+
+      <div className="trust-evidence-summary">
+        <TrustStat label="可信来源" value={queue?.trustedSourceCount ?? trust?.evidence?.successfulCoverageSources ?? 0}
+          detail={(queue?.trustedSourceLabels || []).join(' / ') || '来自 Local Trust 的可信覆盖来源'} />
+        <TrustStat label="队列候选" value={rows.length}
+          detail={`${queue?.canApplyCount || 0} 条可自动写入，${queue?.draftCount || 0} 条待确认`} />
+        <TrustStat label="覆盖 tokens" value={U.compactCN(queue?.totalTokens || 0)}
+          detail={queue?.totalCostUSD ? `${U.fmtUS.format(queue.totalCostUSD)} 官方价换算` : '未定价或尚未生成'} />
+      </div>
+
+      {state.error && <div className="inline-error">{state.error}</div>}
+      {state.message && !state.error && <div className="inline-success">{state.message}</div>}
+
+      {!queue && (
+        <div className="trust-evidence-empty">
+          <strong>先生成队列</strong>
+          <p>系统会读取当前可信来源 session，找出项目、任务、阶段、价值或产出链接缺口。不会读取正文、diff 或完整路径。</p>
+        </div>
+      )}
+
+      {queue && rows.length === 0 && (
+        <div className="trust-evidence-empty">
+          <strong>暂时没有可操作证据</strong>
+          <p>{queue.nextAction}</p>
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="trust-evidence-list">
+          {rows.map((row, index) => (
+            <article key={row.suggestionId || `${row.source}-${row.sessionId}-${index}`} className={`trust-evidence-row ${row.canApply ? 'can-apply' : 'draft'}`}>
+              <div className="trust-evidence-rank">{String(index + 1).padStart(2, '0')}</div>
+              <div className="trust-evidence-main">
+                <div className="trust-evidence-row-head">
+                  <strong>{row.project}</strong>
+                  <span>{row.provenance} · {row.confidence}%</span>
+                </div>
+                <h3>{row.title}</h3>
+                <p>{row.reason}</p>
+                <div className="trust-evidence-tags">
+                  <span>{row.source}</span>
+                  {row.model && <span>{row.model}</span>}
+                  <span>{row.whyTrusted}</span>
+                </div>
+                <div className="trust-evidence-missing">
+                  {(row.missingFields.length ? row.missingFields : ['证据字段']).map(field => (
+                    <span key={field}>{field}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="trust-evidence-side">
+                <strong>{U.compactCN(row.totalTokens)}</strong>
+                <span>{row.costUSD > 0 ? U.fmtUS.format(row.costUSD) : '未定价'}</span>
+                {row.canApply ? (
+                  <button
+                    className="btn btn-primary"
+                    disabled={state.applyingId === row.suggestionId}
+                    onClick={() => onApply(row.suggestionId)}
+                  >
+                    {state.applyingId === row.suggestionId ? '写入中' : '接受建议'}
+                  </button>
+                ) : (
+                  <a className="btn" href="/review">编辑确认</a>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

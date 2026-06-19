@@ -36,12 +36,14 @@ v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence
 - **Coverage Bridge Workflow**: each source shows successful coverage, failure reasons, importable reports, and copy-only commands; the browser generates commands but never runs external scanners.
 - **Local Trust Workbench**: shows data mode, coverage gate, daily/session/event reconciliation, source failure reasons, and sanitized sample rows before making ROI claims.
 - **Evidence Flywheel**: connects real tokens, project identification, automatic evidence, confirmation drafts, output links, and model-strategy samples on `/review`.
+- **Trust-to-Evidence Autopilot**: on the Dashboard and `/trust`, turns trusted-source sessions into the top 10 evidence gaps by official-price cost and token volume, separating direct-write suggestions from confirmation drafts.
 - **Evidence Quality Loop**: separates evidence into direct-write, confirmation draft, blocked, and manual-confirmed tiers; Savings Simulator and Model Strategy label evidence provenance.
 - **Evidence Autopilot**: on `/review`, generate high-confidence attribution, project aliases, output candidates, and model-strategy samples without calling an LLM, reading content, or overwriting manual labels.
 - **Git metadata output candidates**: reads only repo name, remote host, commit hash, and commit time; output links are written only when an HTTPS commit URL can be generated, with no diff or file-content reads.
 - **ROI Savings Simulator**: compares official-price model switching scenarios for exploration, testing, context prep, low-value, and abandoned work.
 - **ccusage JSON Import**: imports documented ccusage JSON output for broader structured usage coverage while recomputing costs with Token Studio official pricing.
 - **ccusage CLI Bridge UX**: the Dashboard only generates copyable local commands; the browser never runs external scanners.
+- **ccusage post-import flow**: after applying ccusage JSON, `/trust` shows source/project/model/session coverage changes and evidence gaps.
 - **Source Health / Coverage Bridge**: shows native stable, experimental, detected-only, and ccusage import-bridge status, recent usage, token-field trust, recommended import path, and privacy boundaries without exposing full local paths.
 - **Collection Coverage Gate**: run `token-studio coverage` before real import/apply to verify whether Claude/Codex have event-level history and whether Cursor is only detected without reliable token fields.
 - **Import / Budget Wizard**: paste or upload ccusage JSON in the Dashboard, dry-run first, inspect shape/session/event counts, unsafe fields, and unpriced models, then explicitly apply to SQLite.

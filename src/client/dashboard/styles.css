@@ -1565,6 +1565,251 @@ button, input, select { font-family: inherit; color: inherit; }
   color: var(--text);
 }
 
+/* ─── Trust Evidence Queue ─────────────────────────────────── */
+
+.trust-evidence-panel {
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in oklab, var(--c-indigo), var(--border) 68%);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, color-mix(in oklab, var(--surface), var(--c-indigo) 4%), var(--surface));
+  box-shadow: 0 14px 34px -32px rgb(0 0 0 / 0.28);
+}
+
+.trust-evidence-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.trust-evidence-head h2 {
+  margin: 3px 0 6px;
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.trust-evidence-head p {
+  max-width: 820px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.trust-evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.trust-evidence-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.trust-evidence-summary article {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface), var(--bg) 25%);
+}
+
+.trust-evidence-summary span,
+.trust-evidence-summary p {
+  display: block;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.trust-evidence-summary strong {
+  display: block;
+  margin: 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inline-error,
+.inline-success {
+  margin: 8px 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.inline-error {
+  border: 1px solid color-mix(in oklab, var(--bad), transparent 68%);
+  background: color-mix(in oklab, var(--bad), transparent 94%);
+  color: var(--bad);
+}
+
+.inline-success {
+  border: 1px solid color-mix(in oklab, var(--good), transparent 68%);
+  background: color-mix(in oklab, var(--good), transparent 94%);
+  color: var(--good);
+}
+
+.trust-evidence-empty {
+  padding: 14px;
+  border: 1px dashed var(--border-2);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--surface), var(--bg) 32%);
+}
+
+.trust-evidence-empty strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.trust-evidence-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.trust-evidence-list {
+  display: grid;
+  gap: 8px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.trust-evidence-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 160px;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.trust-evidence-row.can-apply {
+  border-color: color-mix(in oklab, var(--good), var(--border) 70%);
+  background: linear-gradient(135deg, color-mix(in oklab, var(--surface), var(--good) 4%), var(--surface));
+}
+
+.trust-evidence-rank {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--bg), var(--surface) 45%);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.trust-evidence-main {
+  min-width: 0;
+}
+
+.trust-evidence-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 3px;
+}
+
+.trust-evidence-row-head strong,
+.trust-evidence-row h3 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trust-evidence-row-head strong {
+  font-size: 12px;
+}
+
+.trust-evidence-row-head span {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.trust-evidence-row h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.trust-evidence-row p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trust-evidence-tags,
+.trust-evidence-missing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.trust-evidence-tags {
+  margin-bottom: 6px;
+}
+
+.trust-evidence-tags span,
+.trust-evidence-missing span {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 7px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface), var(--bg) 30%);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.trust-evidence-missing span {
+  border-color: color-mix(in oklab, var(--c-amber), transparent 70%);
+  background: color-mix(in oklab, var(--c-amber), transparent 94%);
+  color: color-mix(in oklab, var(--c-amber), var(--text) 20%);
+}
+
+.trust-evidence-side {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  text-align: right;
+}
+
+.trust-evidence-side strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trust-evidence-side span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 /* ─── Collection coverage gate ───────────────────────────── */
 
 .collection-coverage-panel {
@@ -3511,6 +3756,7 @@ table.dt input[type="checkbox"] {
   .local-trust-body,
   .local-trust-security,
   .local-trust-evidence-flow,
+  .trust-evidence-summary,
   .collection-coverage-stats,
   .collection-coverage-grid,
   .project-coverage-grid,
@@ -3534,7 +3780,8 @@ table.dt input[type="checkbox"] {
   .local-trust-actions {
     min-width: 0;
   }
-  .local-trust-actions .btn {
+  .local-trust-actions .btn,
+  .trust-evidence-actions .btn {
     width: 100%;
   }
   .local-trust-card-head,
@@ -3551,6 +3798,41 @@ table.dt input[type="checkbox"] {
   .local-trust-source-list,
   .local-trust-sample-wrap {
     max-height: 300px;
+  }
+  .trust-evidence-head,
+  .trust-evidence-actions,
+  .trust-evidence-row,
+  .trust-evidence-row-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .trust-evidence-actions {
+    min-width: 0;
+    justify-content: flex-start;
+  }
+  .trust-evidence-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .trust-evidence-rank {
+    width: 40px;
+  }
+  .trust-evidence-row-head span,
+  .trust-evidence-side {
+    text-align: left;
+  }
+  .trust-evidence-side {
+    justify-items: start;
+  }
+  .trust-evidence-side .btn {
+    width: 100%;
+  }
+  .trust-evidence-tags span,
+  .trust-evidence-missing span {
+    max-width: 100%;
+  }
+  .trust-evidence-list {
+    max-height: 460px;
   }
   .data-source-version {
     min-width: 0;

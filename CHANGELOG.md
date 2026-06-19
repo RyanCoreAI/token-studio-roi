@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.8.0
+
+- Added Trust-to-Evidence Autopilot on the Dashboard and `/trust`, generating the top 10 trusted-source evidence gaps by official-price cost and token volume.
+- Added a trusted evidence queue that separates direct-write high-confidence suggestions from confirmation drafts, without overwriting manual annotations.
+- Redirected successful ccusage JSON apply flows to `/trust` so users can immediately inspect coverage changes and evidence gaps.
+- Expanded Markdown Coverage-to-Evidence reporting with trusted-source session and token counts.
+- Local-only milestone: this version is not published to npm in this stage.
+
 ## 5.7.0
 
 - Added a `/trust` entry that focuses the Dashboard on Local Trust, Coverage Bridge, and Source Health without mixing in the full token dashboard.

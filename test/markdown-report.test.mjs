@@ -71,6 +71,8 @@ test('buildMarkdownReviewReport includes coverage bridge and evidence flywheel s
       evidence: {
         coverageSourcesWithUsage: 1,
         successfulCoverageSources: 1,
+        trustedSessionCount: 3,
+        trustedTokenTotal: 120000,
         recognizedProjectCount: 1,
         directWriteCount: 1,
         draftCount: 2,
@@ -114,6 +116,8 @@ test('buildMarkdownReviewReport includes coverage bridge and evidence flywheel s
   assert.match(report, /Claude Code \| 原生可信采集/);
   assert.match(report, /飞轮进度 \| 50%/);
   assert.match(report, /### Coverage-to-Evidence/);
+  assert.match(report, /可信来源 session \| 3/);
+  assert.match(report, /可信来源 token \| 12 万/);
   assert.match(report, /待确认草稿 \| 2/);
   assert.match(report, /下一步：先确认最高成本草稿/);
 });
