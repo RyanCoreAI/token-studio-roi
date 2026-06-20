@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -154,7 +155,7 @@ test('ingest rejects non-local browser origins and non-json bodies', async () =>
 
 async function startServer(extraEnv = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'token-studio-security-'));
-  const port = 7600 + Math.floor(Math.random() * 1000);
+  const port = await freePort(7600);
   const child = spawn(process.execPath, ['src/server.mjs'], {
     cwd: process.cwd(),
     env: {
@@ -244,7 +245,7 @@ function postIngest(port, headers = {}, { body = {} } = {}) {
 
 async function runServerUntilExit(extraEnv = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'token-studio-security-denied-'));
-  const port = 8600 + Math.floor(Math.random() * 1000);
+  const port = await freePort(8600);
   const child = spawn(process.execPath, ['src/server.mjs'], {
     cwd: process.cwd(),
     env: {
@@ -296,4 +297,20 @@ async function waitForApi(port, child, getOutput) {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   throw new Error(`server did not start; output=${getOutput()}`);
+}
+
+async function freePort(start) {
+  for (let port = start; port < start + 1000; port += 1) {
+    if (await canListen(port)) return port;
+  }
+  throw new Error(`No free port found near ${start}`);
+}
+
+function canListen(port) {
+  return new Promise(resolvePort => {
+    const server = createServer();
+    server.once('error', () => resolvePort(false));
+    server.once('listening', () => server.close(() => resolvePort(true)));
+    server.listen(port, '127.0.0.1');
+  });
 }

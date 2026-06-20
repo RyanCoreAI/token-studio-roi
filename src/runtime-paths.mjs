@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 export function resolveViteBin({ packageRoot, requireLike } = {}) {
@@ -22,4 +22,25 @@ export function resolveViteBin({ packageRoot, requireLike } = {}) {
     throw new Error('Vite is not installed. Reinstall token-studio or run npm install in the source checkout, then retry token-studio start.');
   }
   return found;
+}
+
+export function resolveLaunchCwd(packageRoot, {
+  realpathLike = realpathSync,
+  nativeRealpathLike = realpathSync.native
+} = {}) {
+  const fallback = resolve(packageRoot || '.');
+  const candidates = [
+    tryRealpath(realpathLike, fallback),
+    tryRealpath(nativeRealpathLike, fallback),
+    fallback
+  ].filter(Boolean);
+  return candidates.find(candidate => !candidate.includes('~')) || candidates[0] || fallback;
+}
+
+function tryRealpath(realpathLike, path) {
+  try {
+    return realpathLike?.(path) || null;
+  } catch {
+    return null;
+  }
 }

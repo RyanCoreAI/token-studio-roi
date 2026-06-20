@@ -17,7 +17,7 @@ import { formatPrivacyCheckReport, runPrivacyCheck } from './privacy-check.mjs';
 import { buildTerminalReport, formatTerminalReport } from './terminal-report.mjs';
 import { buildEmptyStatuslineSnapshot, buildStatuslineSnapshot, formatStatuslineText } from './statusline.mjs';
 import { buildModelPolicy, formatModelPolicy } from './model-policy.mjs';
-import { resolveViteBin } from './runtime-paths.mjs';
+import { resolveLaunchCwd, resolveViteBin } from './runtime-paths.mjs';
 
 const parsedCommand = parseCommand(process.argv.slice(2));
 const command = parsedCommand.command;
@@ -141,14 +141,15 @@ async function startCommand({ demo = false, dbPath = null, route = '/', openBrow
     ...liveCollectEnv({ enabled: liveCollect && !demo, runOnStart: liveCollectRunOnStart })
   };
   const viteBin = resolveViteBin({ packageRoot: PACKAGE_ROOT, requireLike: requireFromCli });
+  const launchCwd = resolveLaunchCwd(PACKAGE_ROOT);
   const server = spawn(process.execPath, [resolve(SOURCE_DIR, 'server.mjs')], {
-    cwd: PACKAGE_ROOT,
+    cwd: launchCwd,
     env,
     stdio: 'inherit',
     windowsHide: true
   });
   const client = spawn(process.execPath, [viteBin, '--host', '127.0.0.1', '--port', String(uiPort)], {
-    cwd: PACKAGE_ROOT,
+    cwd: launchCwd,
     env,
     stdio: 'inherit',
     windowsHide: true
