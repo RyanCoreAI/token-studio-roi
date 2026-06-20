@@ -1,5 +1,21 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { realpathSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const packageRoot = dirname(fileURLToPath(import.meta.url));
+const cwd = process.cwd();
+const fsAllow = uniqueExistingPaths([
+  packageRoot,
+  cwd,
+  resolve(packageRoot),
+  resolve(cwd),
+  safeRealpath(packageRoot),
+  safeNativeRealpath(packageRoot),
+  safeRealpath(cwd),
+  safeNativeRealpath(cwd)
+]);
 
 export default defineConfig({
   plugins: [react()],
@@ -16,6 +32,9 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500
   },
   server: {
+    fs: {
+      allow: fsAllow
+    },
     watch: {
       ignored: ['**/data/**', '**/.git/**', '**/node_modules/**']
     },
@@ -24,3 +43,23 @@ export default defineConfig({
     }
   }
 });
+
+function safeRealpath(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+function safeNativeRealpath(path) {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return path;
+  }
+}
+
+function uniqueExistingPaths(paths) {
+  return [...new Set(paths.filter(Boolean).map(path => path.replace(/\\/g, '/')))];
+}

@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.0.8
+
+- Fixed GitHub Actions release gates by standardizing CI and package engines on Node.js 24, which is required for `node:sqlite`.
+- Hardened Vite dev-server filesystem allow paths for Windows npm/tarball installs so `smoke:npx` can load the UI from installed package paths.
+- Updated the final release candidate docs and screenshot references for 6.0.8.
+
 ## 6.0.7
 
 - Fixed `/api/live` 24-hour Pulse metrics so token event counts are computed from the requested window instead of a fixed 500-row sample.
