@@ -821,6 +821,76 @@ function Dashboard({
 
   const lastSync = M.runs[0] ? U.formatTs(M.runs[0].collectedAt.replace(' ', 'T')) : '—';
   const trustOnly = routeMode === 'trust';
+  const dashboardOverview = (
+    <>
+      {/* Charts grid */}
+      <div className="grid dashboard-chart-grid">
+        <div className="col-8">
+          <TrendChart
+            rows={filtered}
+            dates={dates}
+            sources={presentSources}
+            compareRows={compareData.rows}
+            compareDates={compareData.dates}
+            mode={trendMode}
+            onModeChange={setTrendMode}
+            totals={totals}
+            onExport={onExportTrend} />
+        </div>
+        <div className="col-4">
+          <SourceDonut
+            rows={filtered}
+            sources={Array.from(new Set(filtered.map(r => r.source)))}
+            total={totals.totalTokens}
+            focused={focusedSource}
+            onFocusSource={setFocusedSource} />
+        </div>
+
+        <div className="col-6">
+          <TopModels rows={filtered} onDrillModel={r => setDrill({ kind: 'model', row: r })} />
+        </div>
+        <div className="col-3">
+          <Gauge
+            rate={totals.cacheHitRate}
+            cacheRead={totals.cacheReadTokens}
+            cacheCreation={totals.cacheCreationTokens}
+            total={totals.totalTokens}
+            prevRate={compareData.totals?.cacheHitRate} />
+        </div>
+        <div className="col-3">
+          <GrowthPanel totalsByDay={dailyTotalsByDay} />
+        </div>
+      </div>
+
+      {/* KPI row */}
+      <div className="kpi-row">
+        <KPI label="总 Token" value={U.compactCN(totals.totalTokens)}
+          sub="vs 上周期"
+          delta={U.deltaPct(totals.totalTokens, compareData.totals?.totalTokens)}
+          sparkValues={sparkValues} sparkColor="oklch(0.55 0.16 265)" />
+        <KPI label="输入 Token" value={U.compactCN(totals.inputTokens)}
+          sub="输入"
+          delta={U.deltaPct(totals.inputTokens, compareData.totals?.inputTokens)}
+          sparkValues={sparkBy('inputTokens')} sparkColor="oklch(0.62 0.13 240)" />
+        <KPI label="输出 Token" value={U.compactCN(totals.outputTokens)}
+          sub="生成"
+          delta={U.deltaPct(totals.outputTokens, compareData.totals?.outputTokens)}
+          sparkValues={sparkBy('outputTokens')} sparkColor="oklch(0.60 0.15 295)" />
+        <KPI label="缓存 Token" value={U.compactCN(totals.cacheTokens)}
+          sub={`命中 ${totals.cacheHitRate.toFixed(0)}%`}
+          delta={U.deltaPct(totals.cacheTokens, compareData.totals?.cacheTokens)}
+          sparkValues={sparkBy('cacheReadTokens')} sparkColor="oklch(0.65 0.11 200)" />
+        <KPI label="推理 Token" value={U.compactCN(totals.reasoningTokens)}
+          sub="推理"
+          delta={U.deltaPct(totals.reasoningTokens, compareData.totals?.reasoningTokens)}
+          sparkValues={sparkBy('reasoningOutputTokens')} sparkColor="oklch(0.65 0.12 150)" />
+        <KPI label="官方价账单" value={U.fmtUS.format(totals.costUSD)}
+          sub="按官网单价"
+          delta={U.deltaPct(totals.costUSD, compareData.totals?.costUSD)}
+          sparkValues={sparkBy('costUSD')} sparkColor="oklch(0.72 0.14 75)" />
+      </div>
+    </>
+  );
 
   return (
     <div className="app">
@@ -862,6 +932,8 @@ function Dashboard({
             onClick={() => setFocusedSource(null)}>取消聚焦</button>
         </div>
       )}
+
+      {!trustOnly && dashboardOverview}
 
       <DataSourceStatusPanel
         runtime={M.meta?.runtime}
@@ -909,74 +981,6 @@ function Dashboard({
         </>
       ) : (
       <>
-
-      {/* Charts grid */}
-      <div className="grid dashboard-chart-grid">
-        <div className="col-8">
-          <TrendChart
-            rows={filtered}
-            dates={dates}
-            sources={presentSources}
-            compareRows={compareData.rows}
-            compareDates={compareData.dates}
-            mode={trendMode}
-            onModeChange={setTrendMode}
-            totals={totals}
-            onExport={onExportTrend} />
-        </div>
-        <div className="col-4">
-          <SourceDonut
-            rows={filtered}
-            sources={Array.from(new Set(filtered.map(r => r.source)))}
-            total={totals.totalTokens}
-            focused={focusedSource}
-            onFocusSource={setFocusedSource} />
-        </div>
-
-        <div className="col-6">
-          <TopModels rows={filtered} onDrillModel={r => setDrill({ kind: 'model', row: r })} />
-        </div>
-        <div className="col-3">
-          <Gauge
-            rate={totals.cacheHitRate}
-            cacheRead={totals.cacheReadTokens}
-            cacheCreation={totals.cacheCreationTokens}
-            total={totals.totalTokens}
-            prevRate={compareData.totals?.cacheHitRate} />
-        </div>
-        <div className="col-3">
-          <GrowthPanel totalsByDay={dailyTotalsByDay} />
-        </div>
-
-      </div>
-
-      {/* KPI row */}
-      <div className="kpi-row">
-        <KPI label="总 Token" value={U.compactCN(totals.totalTokens)}
-          sub="vs 上周期"
-          delta={U.deltaPct(totals.totalTokens, compareData.totals?.totalTokens)}
-          sparkValues={sparkValues} sparkColor="oklch(0.55 0.16 265)" />
-        <KPI label="输入 Token" value={U.compactCN(totals.inputTokens)}
-          sub="输入"
-          delta={U.deltaPct(totals.inputTokens, compareData.totals?.inputTokens)}
-          sparkValues={sparkBy('inputTokens')} sparkColor="oklch(0.62 0.13 240)" />
-        <KPI label="输出 Token" value={U.compactCN(totals.outputTokens)}
-          sub="生成"
-          delta={U.deltaPct(totals.outputTokens, compareData.totals?.outputTokens)}
-          sparkValues={sparkBy('outputTokens')} sparkColor="oklch(0.60 0.15 295)" />
-        <KPI label="缓存 Token" value={U.compactCN(totals.cacheTokens)}
-          sub={`命中 ${totals.cacheHitRate.toFixed(0)}%`}
-          delta={U.deltaPct(totals.cacheTokens, compareData.totals?.cacheTokens)}
-          sparkValues={sparkBy('cacheReadTokens')} sparkColor="oklch(0.65 0.11 200)" />
-        <KPI label="推理 Token" value={U.compactCN(totals.reasoningTokens)}
-          sub="推理"
-          delta={U.deltaPct(totals.reasoningTokens, compareData.totals?.reasoningTokens)}
-          sparkValues={sparkBy('reasoningOutputTokens')} sparkColor="oklch(0.65 0.12 150)" />
-        <KPI label="官方价账单" value={U.fmtUS.format(totals.costUSD)}
-          sub="按官网单价"
-          delta={U.deltaPct(totals.costUSD, compareData.totals?.costUSD)}
-          sparkValues={sparkBy('costUSD')} sparkColor="oklch(0.72 0.14 75)" />
-      </div>
 
       <OfficialPricingNotice meta={M.meta?.officialPricing} visibleCostUSD={totals.costUSD} />
       <CollectionCoveragePanel
@@ -1525,8 +1529,9 @@ function SourceHealthPanel({ rows = [], coverageBridge = null, onOpenImportBudge
   const groups = {
     nativeTrusted: coverageBridge?.summary?.nativeTrusted ?? rows.filter(row => row.supportStatus === 'stable').length,
     importable: coverageBridge?.summary?.importable ?? rows.filter(row => row.supportStatus === 'import-only').length,
-    detectedOnly: coverageBridge?.summary?.detectedOnly ?? rows.filter(row => row.detected || row.supportStatus === 'detected-only' || row.supportStatus === 'experimental').length,
-    unsupported: coverageBridge?.summary?.unsupported ?? rows.filter(row => !row.detected && row.supportStatus !== 'stable' && row.supportStatus !== 'import-only').length
+    experimental: coverageBridge?.summary?.experimental ?? rows.filter(row => row.supportStatus === 'experimental').length,
+    detectedOnly: coverageBridge?.summary?.detectedOnly ?? rows.filter(row => row.detected || row.supportStatus === 'detected-only').length,
+    unsupported: coverageBridge?.summary?.unsupported ?? rows.filter(row => !row.detected && !['stable', 'experimental', 'import-only'].includes(row.supportStatus)).length
   };
   const bridgeById = new Map(bridgeRows.map(row => [row.id, row]));
   const activeRows = rows.filter(row => row.detected || row.sessions || row.tokenEvents || row.dailyRows || row.supportStatus === 'import-only');
@@ -1555,7 +1560,7 @@ function SourceHealthPanel({ rows = [], coverageBridge = null, onOpenImportBudge
         <div>
           <div className="eyebrow">Coverage Bridge Center</div>
           <h2>覆盖方式要分清：原生可信、ccusage 可导入、仅检测到</h2>
-          <p>这里解释每个工具为什么有或没有 token 数据。只有“原生可信采集”和成功导入的结构化 JSON 才算用量覆盖；“仅检测到”不会伪造成 token。</p>
+          <p>这里解释每个工具为什么有或没有 token 数据。只有“原生可信采集”和成功导入的结构化 JSON 才算用量覆盖；“实验采集”和“仅检测到”不会伪造成 token。</p>
         </div>
         <div className="source-health-actions">
           <button className="btn btn-primary" onClick={onOpenImportBudget}>生成 ccusage 命令</button>
@@ -1565,6 +1570,7 @@ function SourceHealthPanel({ rows = [], coverageBridge = null, onOpenImportBudge
       <div className="source-health-stats">
         <SourceHealthStat label="原生可信" value={groups.nativeTrusted} />
         <SourceHealthStat label="ccusage 可导入" value={groups.importable} />
+        <SourceHealthStat label="实验采集" value={groups.experimental} />
         <SourceHealthStat label="仅检测到" value={groups.detectedOnly} />
         <SourceHealthStat label="无 token 字段" value={groups.unsupported} />
         <SourceHealthStat label="已接入用量" value={coverageBridge?.summary?.successfulCoverage ?? coverageBridge?.summary?.sourcesWithUsage ?? 0} />
@@ -1579,7 +1585,7 @@ function SourceHealthPanel({ rows = [], coverageBridge = null, onOpenImportBudge
             <div className="source-health-card-meta">
               <span>{row.detected ? '已检测到' : '未检测到'}</span>
               <span>{row.privacy || (row.readsConversationContent ? '可能读取内容' : '不读取正文')}</span>
-              <span>{tokenReliabilityLabel(row.tokenReliability)}</span>
+              <span>{row.tokenReliabilityLabel || tokenReliabilityLabel(row.tokenReliability)}</span>
             </div>
             <div className="source-health-card-counts">
               <b>{U.compactCN(row.sessions || 0)}</b>
@@ -1595,8 +1601,8 @@ function SourceHealthPanel({ rows = [], coverageBridge = null, onOpenImportBudge
             </div>
             <div className="source-health-recommendation">
               <span>{row.workflow?.label || '推荐方式'}</span>
-              <p>{row.workflow?.reason || row.failureReason || row.recommendedAction || row.recommendedImport || '先看 coverage，再决定是否原生采集或导入 ccusage JSON。'}</p>
-              <strong>{row.workflow?.nextStep || row.recommendedAction || '先 dry-run，再确认写入。'}</strong>
+              <p>{row.whyNoData || row.workflow?.reason || row.failureReason || row.recommendedAction || row.recommendedImport || '先看 coverage，再决定是否原生采集或导入 ccusage JSON。'}</p>
+              <strong>{row.recommendedPath ? `${row.recommendedPath}：` : ''}{row.workflow?.nextStep || row.recommendedAction || '先 dry-run，再确认写入。'}</strong>
             </div>
             {Array.isArray(row.importReports) && row.importReports.length > 0 && (
               <div className="source-health-reports">
@@ -1644,7 +1650,8 @@ function sourceTierLabel(row) {
 function supportStatusToBridgeStatus(row) {
   if (row.supportStatus === 'stable' && row.tokenReliability === 'native-token-fields') return 'native-trusted';
   if (row.supportStatus === 'import-only' || row.id === 'ccusage') return 'ccusage-importable';
-  if (row.detected || row.supportStatus === 'experimental' || row.supportStatus === 'detected-only') return 'detected-only';
+  if (row.supportStatus === 'experimental') return 'experimental-audit';
+  if (row.detected || row.supportStatus === 'detected-only') return 'detected-only';
   return 'unsupported';
 }
 
@@ -1652,6 +1659,7 @@ function bridgeStatusLabel(status) {
   const labels = {
     'native-trusted': '原生可信采集',
     'ccusage-importable': 'ccusage 可导入',
+    'experimental-audit': '实验采集',
     'detected-only': '仅检测到',
     unsupported: '不支持 / 无 token 字段'
   };
@@ -1735,11 +1743,13 @@ function ImportBudgetModal({
   const [budgetError, setBudgetError] = useState(null);
   const [budgetForm, setBudgetForm] = useState(() => ({
     source: sources[0] || 'Codex CLI',
+    modelGroup: '',
     label: '',
     windowType: 'rolling',
     windowMinutes: 60,
     resetAnchor: defaultResetAnchor(),
     warningThreshold: 0.75,
+    hardThreshold: 1,
     tokenBudget: '',
     costBudgetUSD: '',
     enabled: true
@@ -1777,11 +1787,18 @@ function ImportBudgetModal({
     try {
       await onSaveBudgetProfile({
         source: budgetForm.source.trim(),
-        label: budgetForm.label.trim() || `${budgetForm.source.trim()} custom budget`,
+        modelGroup: budgetForm.modelGroup.trim(),
+        label: budgetForm.label.trim()
+          || (budgetForm.source.trim()
+            ? `${budgetForm.source.trim()} custom budget`
+            : budgetForm.modelGroup.trim()
+              ? `${budgetForm.modelGroup.trim()} model budget`
+              : 'Custom token budget'),
         windowType: budgetForm.windowType,
         windowMinutes: Number(budgetForm.windowMinutes) || 60,
         resetAnchor: budgetForm.windowType === 'fixed' ? budgetForm.resetAnchor : '',
         warningThreshold: Number(budgetForm.warningThreshold) || 0.75,
+        hardThreshold: Number(budgetForm.hardThreshold) || 1,
         tokenBudget: budgetForm.tokenBudget === '' ? 0 : Number(budgetForm.tokenBudget),
         costBudgetUSD: budgetForm.costBudgetUSD === '' ? 0 : Number(budgetForm.costBudgetUSD),
         enabled: budgetForm.enabled
@@ -1964,6 +1981,19 @@ function ImportBudgetModal({
                 />
               </label>
               <label className="form-field">
+                <span>模型组</span>
+                <select
+                  value={budgetForm.modelGroup}
+                  onChange={(event) => setBudgetForm({ ...budgetForm, modelGroup: event.target.value })}
+                >
+                  <option value="">all models</option>
+                  <option value="heavy">heavy</option>
+                  <option value="mid">mid</option>
+                  <option value="light">light</option>
+                  <option value="unpriced">unpriced</option>
+                </select>
+              </label>
+              <label className="form-field">
                 <span>窗口类型</span>
                 <select
                   value={budgetForm.windowType}
@@ -2003,6 +2033,17 @@ function ImportBudgetModal({
                 />
               </label>
               <label className="form-field">
+                <span>硬阈值</span>
+                <input
+                  type="number"
+                  min="0.5"
+                  max="2"
+                  step="0.05"
+                  value={budgetForm.hardThreshold}
+                  onChange={(event) => setBudgetForm({ ...budgetForm, hardThreshold: event.target.value })}
+                />
+              </label>
+              <label className="form-field">
                 <span>Token 预算</span>
                 <input
                   type="number"
@@ -2034,7 +2075,7 @@ function ImportBudgetModal({
             </div>
             {budgetError && <div className="form-error">{budgetError}</div>}
             <div className="import-budget-actions">
-              <button className="btn btn-primary" onClick={saveBudget} disabled={budgetBusy || !budgetForm.source.trim() || (!budgetForm.tokenBudget && !budgetForm.costBudgetUSD)}>
+              <button className="btn btn-primary" onClick={saveBudget} disabled={budgetBusy || (!budgetForm.tokenBudget && !budgetForm.costBudgetUSD)}>
                 {budgetBusy ? '保存中' : '保存预算'}
               </button>
             </div>
@@ -2091,8 +2132,10 @@ function BudgetProfileList({ profiles, busy, onDelete }) {
             <strong>{profile.label}</strong>
             <span>
               {profile.source || 'all sources'} · {profile.windowType || 'rolling'} · {profile.windowMinutes} min
+              {profile.modelGroup ? ` · ${profile.modelGroup} models` : ''}
               {profile.resetAnchor ? ` · reset ${profile.resetAnchor}` : ''}
-              {' '}· warn {Math.round(Number(profile.warningThreshold || 0.75) * 100)}% · {profile.enabled ? '生效中' : '已停用'}
+              {' '}· warn {Math.round(Number(profile.warningThreshold || 0.75) * 100)}%
+              {' '}· hard {Math.round(Number(profile.hardThreshold || 1) * 100)}% · {profile.enabled ? '生效中' : '已停用'}
             </span>
           </div>
           <div>

@@ -77,7 +77,7 @@ async function autoCommand() {
 
   if (args.noCollect) {
     console.log('[token-studio] auto collect skipped (--no-collect). Starting local UI.');
-    await startCommand({ demo: false, dbPath, openBrowser });
+    await startCommand({ demo: false, dbPath, openBrowser, liveCollect: false });
     return;
   }
 
@@ -89,13 +89,13 @@ async function autoCommand() {
   } catch (error) {
     console.error(`[token-studio] coverage failed: ${error.message}`);
     console.error('[token-studio] SQLite was not modified. Starting local UI so the failure is visible.');
-    await startCommand({ demo: false, dbPath, openBrowser });
+    await startCommand({ demo: false, dbPath, openBrowser, liveCollect: false });
     return;
   }
 
   if (args.dryRunOnly) {
     console.log('[token-studio] dry-run only; SQLite was not modified. Starting local UI.');
-    await startCommand({ demo: false, dbPath, openBrowser });
+    await startCommand({ demo: false, dbPath, openBrowser, liveCollect: false });
     return;
   }
 
@@ -115,7 +115,7 @@ async function autoCommand() {
     console.log('[token-studio] no trusted Claude/Codex event-level history found; SQLite was not modified.');
   }
 
-  await startCommand({ demo: false, dbPath, openBrowser });
+  await startCommand({ demo: false, dbPath, openBrowser, liveCollect: true });
 }
 
 async function demoCommand() {
@@ -129,7 +129,7 @@ async function demoCommand() {
   await startCommand({ demo: true, dbPath });
 }
 
-async function startCommand({ demo = false, dbPath = null, route = '/', openBrowser = false } = {}) {
+async function startCommand({ demo = false, dbPath = null, route = '/', openBrowser = false, liveCollect = false, liveCollectRunOnStart = false } = {}) {
   const apiPort = Number(args.apiPort || args.port || await freePort(4173));
   const uiPort = Number(args.uiPort || await freePort(5173));
   const env = {
@@ -137,7 +137,8 @@ async function startCommand({ demo = false, dbPath = null, route = '/', openBrow
     PORT: String(apiPort),
     API_PORT: String(apiPort),
     DB_PATH: dbPath || resolve(USER_CWD, args.db || process.env.DB_PATH || 'data/usage.sqlite'),
-    TOKEN_STUDIO_DEMO_MODE: demo ? '1' : process.env.TOKEN_STUDIO_DEMO_MODE || ''
+    TOKEN_STUDIO_DEMO_MODE: demo ? '1' : process.env.TOKEN_STUDIO_DEMO_MODE || '',
+    ...liveCollectEnv({ enabled: liveCollect && !demo, runOnStart: liveCollectRunOnStart })
   };
   const viteBin = resolveViteBin({ packageRoot: PACKAGE_ROOT, requireLike: requireFromCli });
   const server = spawn(process.execPath, [resolve(SOURCE_DIR, 'server.mjs')], {
@@ -166,10 +167,29 @@ async function startCommand({ demo = false, dbPath = null, route = '/', openBrow
   }
   console.log(`[token-studio] UI  ${uiUrl}${demo ? '  (Demo Mode)' : ''}`);
   console.log(`[token-studio] API http://127.0.0.1:${apiPort}`);
+  if (liveCollect && !demo) {
+    console.log(`[token-studio] live collect refresh enabled every ${envLiveCollectIntervalSeconds()}s for Claude/Codex metadata.`);
+  }
   if (openBrowser) {
     setTimeout(() => openUrl(uiUrl), 900).unref?.();
   }
   await waitForChildren([server, client]);
+}
+
+function liveCollectEnv({ enabled = false, runOnStart = false } = {}) {
+  if (!enabled) return {};
+  const intervalSeconds = envLiveCollectIntervalSeconds();
+  return {
+    SCHEDULED_COLLECT_ENABLED: '1',
+    SCHEDULED_COLLECT_RUN_ON_START: runOnStart ? '1' : '0',
+    SCHEDULED_COLLECT_INTERVAL_SECONDS: String(intervalSeconds),
+    TOKEN_STUDIO_LIVE_COLLECT_INTERVAL_SECONDS: String(intervalSeconds)
+  };
+}
+
+function envLiveCollectIntervalSeconds() {
+  const requested = Number(process.env.TOKEN_STUDIO_LIVE_COLLECT_INTERVAL_SECONDS || process.env.SCHEDULED_COLLECT_INTERVAL_SECONDS || 60);
+  return Math.max(30, Number.isFinite(requested) && requested > 0 ? Math.round(requested) : 60);
 }
 
 async function collectCommand() {
@@ -406,7 +426,7 @@ async function budgetCommand() {
         return;
       }
       for (const profile of profiles) {
-        console.log(`- #${profile.id} ${profile.label}: source=${profile.source || '*'}, window=${profile.windowType || 'rolling'}:${profile.windowMinutes}m, reset=${profile.resetAnchor || '-'}, warn=${Math.round(Number(profile.warningThreshold || 0.75) * 100)}%, tokenBudget=${profile.tokenBudget || '-'}, costBudgetUSD=${profile.costBudgetUSD || '-'}, enabled=${profile.enabled ? 'yes' : 'no'}`);
+        console.log(`- #${profile.id} ${profile.label}: source=${profile.source || '*'}, modelGroup=${profile.modelGroup || '*'}, window=${profile.windowType || 'rolling'}:${profile.windowMinutes}m, reset=${profile.resetAnchor || '-'}, warn=${Math.round(Number(profile.warningThreshold || 0.75) * 100)}%, hard=${Math.round(Number(profile.hardThreshold || 1) * 100)}%, tokenBudget=${profile.tokenBudget || '-'}, costBudgetUSD=${profile.costBudgetUSD || '-'}, enabled=${profile.enabled ? 'yes' : 'no'}`);
       }
       return;
     }
@@ -414,11 +434,13 @@ async function budgetCommand() {
       const profile = upsertBudgetProfile(db, {
         id: args.id,
         source: args.source || '',
+        modelGroup: args.modelGroup || '',
         label: args.label,
         windowType: args.windowType || 'rolling',
         windowMinutes: args.windowMinutes,
         resetAnchor: args.resetAnchor || null,
         warningThreshold: args.warningThreshold ?? 0.75,
+        hardThreshold: args.hardThreshold ?? 1,
         tokenBudget: args.tokenBudget || 0,
         costBudgetUSD: args.costBudgetUsd ?? args.costBudgetUSD ?? 0,
         enabled: args.enabled ?? true
@@ -890,6 +912,7 @@ function printHelp() {
     '',
     'Commands:',
     '  token-studio [--db data/usage.sqlite] [--no-collect|--dry-run-only]',
+    '    Default real entry: coverage -> trusted Claude/Codex apply -> UI -> 60s live refresh.',
     '  token-studio demo [--seed-only] [--db data/demo.sqlite]',
     '  token-studio start [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
     '  token-studio open [--db data/usage.sqlite] [--api-port 4173] [--ui-port 5173]',
@@ -920,13 +943,16 @@ function printBudgetHelp() {
     'Examples:',
     '  token-studio budget list',
     '  token-studio budget set --source "Codex CLI" --label "Codex 15m" --window-minutes 15 --token-budget 50000',
+    '  token-studio budget set --model-group heavy --label "Heavy model daily cap" --window-minutes 1440 --token-budget 200000 --hard-threshold 1',
     '  token-studio budget set --source "Claude Code" --label "Claude 5h" --window-type fixed --window-minutes 300 --reset-anchor 2026-06-17T09:00:00Z --warning-threshold 0.75 --token-budget 500000',
     '  token-studio budget delete --id 1',
     '',
     'Options:',
     '  --window-type rolling|fixed',
+    '  --model-group all|heavy|mid|light|priced|unpriced',
     '  --reset-anchor <ISO datetime>    fixed windows only',
-    '  --warning-threshold <0-1>        default 0.75'
+    '  --warning-threshold <0-1>        default 0.75',
+    '  --hard-threshold <0.5-2>         exceeded threshold, default 1'
   ].join('\n'));
 }
 

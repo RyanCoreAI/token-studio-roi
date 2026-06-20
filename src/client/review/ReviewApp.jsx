@@ -16,6 +16,11 @@ import { buildSavingsSimulation } from './savings-simulator.js';
 import { buildReviewTrustState } from './review-trust.js';
 import { buildEvidenceZeroState, buildSavingsEmptyReason } from './review-empty-states.js';
 import { buildAdvisorActionMeasurements } from './action-measurement.js';
+import {
+  buildProfessionalEvidencePack,
+  buildResumeAndInterviewPack,
+  buildTechnicalBlogDraft
+} from './export-materials.js';
 import './styles.css';
 
 function formatApiConnectionError(error, action = '请求') {
@@ -28,18 +33,29 @@ function formatApiConnectionError(error, action = '请求') {
 
 async function copyText(text) {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return true;
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall back for headless browsers, older WebViews, or blocked clipboard permissions.
+    }
   }
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.setAttribute('readonly', '');
   textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
   textarea.style.opacity = '0';
   document.body.appendChild(textarea);
+  textarea.focus();
   textarea.select();
-  document.execCommand('copy');
-  document.body.removeChild(textarea);
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+  if (!copied) throw new Error('copy failed');
   return true;
 }
 
@@ -113,6 +129,9 @@ function ReviewDashboard({ rawData, onReloadData }) {
     plan: null,
     dismissedIds: []
   });
+  const [activeContentModal, setActiveContentModal] = useState(null);
+  const [copyToast, setCopyToast] = useState({ message: '', kind: 'success' });
+  const copyToastTimerRef = useRef(null);
   const pageRefs = useRef([]);
   const period = useMemo(() => RU.getPeriod(periodId, TODAY, rawData.daily), [periodId, rawData.daily]);
   const prevPeriod = useMemo(() => period.prev
@@ -204,6 +223,18 @@ function ReviewDashboard({ rawData, onReloadData }) {
   const coverageBridge = rawData.meta?.coverageBridge || null;
   const localTrust = rawData.meta?.localTrust || null;
 
+  useEffect(() => () => {
+    if (copyToastTimerRef.current) clearTimeout(copyToastTimerRef.current);
+  }, []);
+
+  const showCopyToast = useCallback((message, kind = 'success') => {
+    if (copyToastTimerRef.current) clearTimeout(copyToastTimerRef.current);
+    setCopyToast({ message, kind });
+    copyToastTimerRef.current = setTimeout(() => {
+      setCopyToast({ message: '', kind: 'success' });
+    }, 1800);
+  }, []);
+
   useEffect(() => {
     setAdvisorActions(rawData.advisorActions || []);
   }, [rawData.advisorActions]);
@@ -240,6 +271,37 @@ function ReviewDashboard({ rawData, onReloadData }) {
       localTrust
     })
   , [period, daily, sessions, rawData.workItems, roiAdvice, insights, savingsSimulation, advisorActions, actionMeasurements, coverageBridge, evidenceFlywheel, localTrust]);
+
+  const blogMaterial = useMemo(() => buildTechnicalBlogDraft({
+    period,
+    sessions,
+    totals,
+    localTrust,
+    coverageBridge,
+    evidenceFlywheel,
+    savingsSimulation,
+    modelStrategy
+  }), [period, sessions, totals, localTrust, coverageBridge, evidenceFlywheel, savingsSimulation, modelStrategy]);
+
+  const resumeMaterial = useMemo(() => buildResumeAndInterviewPack({
+    sessions,
+    totals,
+    localTrust,
+    coverageBridge,
+    evidenceFlywheel
+  }), [sessions, totals, localTrust, coverageBridge, evidenceFlywheel]);
+
+  const evidenceMaterial = useMemo(() => buildProfessionalEvidencePack({
+    period,
+    sessions,
+    totals,
+    localTrust,
+    coverageBridge,
+    roiEvidence,
+    evidenceFlywheel,
+    evidenceAutopilotState
+  }), [period, sessions, totals, localTrust, coverageBridge, roiEvidence, evidenceFlywheel, evidenceAutopilotState]);
+
   const persistAdvisorAction = useCallback(async (payload) => {
     const response = await fetch('/api/advisor-actions', {
       method: 'POST',
@@ -409,6 +471,50 @@ function ReviewDashboard({ rawData, onReloadData }) {
     }));
   }, []);
 
+  const modalSpec = useMemo(() => {
+    if (activeContentModal === 'evidence') {
+      return {
+        eyebrow: 'Evidence Autopilot',
+        title: '专业复盘证据包',
+        description: '可直接粘贴到周报、README、博客或面试准备文档。内容只使用结构化数据，并明确写出可信边界。',
+        body: evidenceMaterial,
+        copyLabel: '复制复盘证据包',
+        secondaryLabel: evidenceAutopilotState.busy ? '生成中…' : '生成/刷新证据',
+        secondaryDisabled: evidenceAutopilotState.busy,
+        onSecondary: runEvidenceAutopilot
+      };
+    }
+    if (activeContentModal === 'blog') {
+      return {
+        eyebrow: 'Blog Material',
+        title: '技术博客草稿',
+        description: '按问题、方案、实现、验证、隐私、局限和经验总结组织，可直接作为博客初稿再人工润色。',
+        body: blogMaterial,
+        copyLabel: '复制技术博客草稿'
+      };
+    }
+    if (activeContentModal === 'resume') {
+      return {
+        eyebrow: 'Resume Material',
+        title: '简历 / 面试项目描述',
+        description: '包含中文简历、英文简历和 STAR 面试版本；只写可证实能力，不编造 ROI 提升百分比。',
+        body: resumeMaterial,
+        copyLabel: '复制简历项目描述'
+      };
+    }
+    return null;
+  }, [activeContentModal, blogMaterial, evidenceAutopilotState.busy, evidenceMaterial, resumeMaterial, runEvidenceAutopilot]);
+
+  const copyModalContent = useCallback(async () => {
+    if (!modalSpec?.body) return;
+    try {
+      await copyText(modalSpec.body);
+      showCopyToast('复制成功，可直接粘贴使用');
+    } catch {
+      showCopyToast('复制失败，请手动复制', 'error');
+    }
+  }, [modalSpec, showCopyToast]);
+
   // Period nav
   const ORDER = ['week', 'month', 'prev', '90d', 'all'];
   const idx = ORDER.indexOf(periodId);
@@ -439,25 +545,6 @@ function ReviewDashboard({ rawData, onReloadData }) {
       'text/markdown;charset=utf-8'
     );
   };
-
-  const copyBlogMaterial = () => copyText(
-    [
-      `Token Studio ROI ${period.pretty || ''} 复盘：本期记录 ${sessions.length} 个 session、${U.compactCN(totals.total)} tokens，官方价换算 ${U.fmtUS.format(totals.cost)}。`,
-      `Local Trust 结论：${localTrust?.conclusion?.decision || '当前数据可信度待确认'}；${localTrust?.conclusion?.action || '先确认 coverage，再进入证据飞轮。'}`,
-      `Coverage Bridge 显示 ${coverageBridge?.summary?.nativeTrusted || 0} 个来源可原生可信采集、${coverageBridge?.summary?.importable || 0} 个来源可通过 ccusage 导入；detected-only 不会被伪造成用量。`,
-      `Evidence Flywheel 当前 ${evidenceFlywheel?.completedSteps || 0}/${evidenceFlywheel?.totalSteps || 6} 步完成，下一步是：${evidenceFlywheel?.nextAction || '继续补齐项目、任务、产出和模型策略证据'}。`,
-      '所有成本都是官方公开 token 价格换算，不是供应商账单；报告不读取 prompt、response、transcript、diff 或完整路径。'
-    ].join('\n\n')
-  );
-
-  const copyResumeMaterial = () => copyText(
-    [
-      '- Built Token Studio ROI, a local-first AI coding ROI review tool with event-level token collection, official-price cost conversion, privacy gates, and evidence-based review workflows.',
-      '- Added a Local Trust Workbench that explains data mode, coverage gate status, source failures, reconciliation, and sanitized sample rows before ROI conclusions.',
-      '- Designed Coverage Bridge to distinguish native trusted collectors, ccusage import paths, detected-only tools, and unsupported sources without fabricating token usage.',
-      '- Added Evidence Flywheel and rule-based Autopilot to turn local structured metadata into project attribution, output evidence, model policy samples, and weekly review actions without reading conversation content.'
-    ].join('\n')
-  );
 
   const reviewPages = useMemo(() => [
     {
@@ -659,11 +746,11 @@ function ReviewDashboard({ rawData, onReloadData }) {
             ))}
           </div>
           <div className="nav-actions">
-            <button className="nav-btn primary" onClick={runEvidenceAutopilot} disabled={evidenceAutopilotState.busy}>
+            <button className="nav-btn primary" onClick={() => setActiveContentModal('evidence')}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                 <path d="M6.5 1.5l1.1 3.2 3.4 1-3.4 1-1.1 3.3-1.1-3.3-3.4-1 3.4-1 1.1-3.2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
               </svg>
-              {evidenceAutopilotState.busy ? '生成中' : '生成复盘证据'}
+              复制复盘证据包
             </button>
             <button className="nav-btn primary" onClick={exportMarkdown}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -671,11 +758,11 @@ function ReviewDashboard({ rawData, onReloadData }) {
               </svg>
               导出报告
             </button>
-            <button className="nav-btn" onClick={copyBlogMaterial}>
-              复制博客素材
+            <button className="nav-btn" onClick={() => setActiveContentModal('blog')}>
+              复制技术博客草稿
             </button>
-            <button className="nav-btn" onClick={copyResumeMaterial}>
-              复制简历描述
+            <button className="nav-btn" onClick={() => setActiveContentModal('resume')}>
+              复制简历项目描述
             </button>
             <button className="nav-btn" onClick={() => window.print()}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -743,7 +830,64 @@ function ReviewDashboard({ rawData, onReloadData }) {
           </button>
         </div>
       </footer>
+
+      <ReviewContentModal
+        spec={modalSpec}
+        toast={copyToast}
+        onClose={() => setActiveContentModal(null)}
+        onCopy={copyModalContent}
+      />
     </>
+  );
+}
+
+function ReviewContentModal({ spec, toast, onClose, onCopy }) {
+  if (!spec) return null;
+  return (
+    <div className="review-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="review-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-modal-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="review-modal-head">
+          <div>
+            <span>{spec.eyebrow}</span>
+            <h2 id="review-modal-title">{spec.title}</h2>
+            <p>{spec.description}</p>
+          </div>
+          <button type="button" className="review-modal-close" onClick={onClose} aria-label="关闭弹窗">
+            ×
+          </button>
+        </div>
+        <pre className="review-modal-body">{spec.body}</pre>
+        <div className="review-modal-actions">
+          {spec.onSecondary && (
+            <button
+              type="button"
+              className="review-modal-secondary"
+              disabled={spec.secondaryDisabled}
+              onClick={spec.onSecondary}
+            >
+              {spec.secondaryLabel}
+            </button>
+          )}
+          <button type="button" className="review-modal-copy" onClick={onCopy}>
+            {spec.copyLabel || '复制内容'}
+          </button>
+          <button type="button" className="review-modal-cancel" onClick={onClose}>
+            关闭
+          </button>
+          {toast?.message && (
+            <span className={`review-copy-toast ${toast.kind === 'error' ? 'error' : 'success'}`} role="status">
+              {toast.message}
+            </span>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 

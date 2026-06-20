@@ -1,6 +1,6 @@
 {
   "name": "token-studio",
-  "version": "5.9.1",
+  "version": "6.0.6",
   "description": "Local AI coding ROI studio for private token, output, and model strategy review.",
   "type": "module",
   "bin": {
@@ -24,6 +24,8 @@
     "smoke:npx": "node scripts/smoke-npx.mjs",
     "smoke:browser": "node scripts/smoke-browser-console.mjs",
     "smoke:published": "node scripts/smoke-published.mjs",
+    "desktop": "electron desktop/main.mjs",
+    "desktop:smoke": "node scripts/smoke-desktop.mjs",
     "test": "node --test"
   },
   "engines": {
@@ -35,5 +37,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "vite": "^8.0.16"
+  },
+  "devDependencies": {
+    "electron": "^42.4.1"
   }
 }

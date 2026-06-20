@@ -68,6 +68,8 @@ All write APIs require:
 - local or empty Origin
 - `Content-Type: application/json`
 
+`/api/ingest` is disabled by default. It is enabled only when `INGEST_TOKEN` is set, and every ingest request must send `Authorization: Bearer <token>` with a JSON body. This keeps remote machine ingestion explicit instead of leaving a writable endpoint open by accident.
+
 The server does not trust `X-Forwarded-For` for local access checks. Non-loopback binds such as `HOST=0.0.0.0` are refused unless `TOKEN_STUDIO_ALLOW_REMOTE=1` and `INGEST_TOKEN` are both set. That mode is for explicit ingest use and does not relax normal Dashboard API read/write guards.
 
 ## Cost Boundary

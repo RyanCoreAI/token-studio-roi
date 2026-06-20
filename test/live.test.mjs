@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildLiveGuardrails, buildLiveSnapshot } from '../src/live.mjs';
+import { buildLiveDataFreshness, buildLiveGuardrails, buildLiveSnapshot } from '../src/live.mjs';
 import { openDb, upsertTokenEvent } from '../src/db.mjs';
 
 test('live snapshot uses recent token events for burn rate and cache hit', () => {
@@ -32,10 +32,45 @@ test('live snapshot uses recent token events for burn rate and cache hit', () =>
   });
   assert.equal(snapshot.status, 'active');
   assert.equal(snapshot.totals.totalTokens, 1750);
+  assert.equal(snapshot.dataFreshness, 'fresh');
   assert.equal(snapshot.totals.burnRateTokensPerHour, 7000);
   assert.equal(snapshot.bySource[0].key, 'Cursor');
   assert.equal(snapshot.activeSessions.length, 0);
   assert.ok(snapshot.totals.cacheHitRate > 0);
+});
+
+test('live snapshot builds 24h pulse metrics from event-level rows', () => {
+  const snapshot = buildLiveSnapshot({
+    now: new Date('2026-06-17T12:00:00Z'),
+    windowMinutes: 1440,
+    tokenEvents: [{
+      eventId: 'e1',
+      device: 'demo',
+      source: 'Codex CLI',
+      sessionId: 's1',
+      timestamp: '2026-06-17T01:10:00Z',
+      model: 'gpt-5.5',
+      inputTokens: 1000,
+      outputTokens: 100,
+      cacheReadTokens: 400
+    }, {
+      eventId: 'e2',
+      device: 'demo',
+      source: 'Claude Code',
+      sessionId: 's2',
+      timestamp: '2026-06-17T11:50:00Z',
+      model: 'claude-opus-4-7',
+      inputTokens: 2000,
+      outputTokens: 300,
+      cacheReadTokens: 700
+    }]
+  });
+  assert.equal(snapshot.totals.requestCount, 2);
+  assert.equal(snapshot.pulse.requestCount, 2);
+  assert.equal(snapshot.pulse.timeline.length, 24);
+  assert.equal(snapshot.pulse.agent.activeMinutes, 30);
+  assert.equal(snapshot.pulse.agent.utilizationPercent, 2.083333333333333);
+  assert.equal(snapshot.byModel[0].requests, 1);
 });
 
 test('live snapshot reports idle empty state', () => {
@@ -46,7 +81,37 @@ test('live snapshot reports idle empty state', () => {
   });
   assert.equal(snapshot.status, 'idle');
   assert.equal(snapshot.totals.totalTokens, 0);
+  assert.equal(snapshot.dataFreshness, 'empty');
   assert.deepEqual(snapshot.byModel, []);
+});
+
+test('live data freshness explains collecting, stale and empty states', () => {
+  assert.equal(buildLiveDataFreshness({
+    collectionState: { status: 'running' }
+  }).dataFreshness, 'collecting');
+
+  assert.equal(buildLiveDataFreshness({
+    collectionState: { status: 'error', message: 'collector failed' },
+    tokenEventCount: 10
+  }).dataFreshness, 'error');
+
+  assert.equal(buildLiveDataFreshness({
+    nowMs: new Date('2026-06-20T10:00:00Z').getTime(),
+    tokenEventCount: 10,
+    latestEventAt: '2026-06-20T09:00:00Z',
+    latestCollectionRunAt: '2026-06-20T09:59:30Z',
+    refreshIntervalSeconds: 60
+  }).dataFreshness, 'fresh');
+
+  const stale = buildLiveDataFreshness({
+    nowMs: new Date('2026-06-20T10:00:00Z').getTime(),
+    tokenEventCount: 10,
+    latestEventAt: '2026-06-20T09:00:00Z',
+    latestCollectionRunAt: '2026-06-20T09:30:00Z',
+    refreshIntervalSeconds: 60
+  });
+  assert.equal(stale.dataFreshness, 'stale');
+  assert.match(stale.staleReason, /刷新/);
 });
 
 test('live guardrails warn on burn rate, low cache hit, low output/input and unpriced models', () => {
@@ -254,7 +319,59 @@ test('live API returns guardrails and warnings from temporary SQLite', async () 
     if (!response.ok) assert.fail(await response.text());
     const body = await response.json();
     assert.equal(body.guardrails.tokenBudgetPerHour, 50_000);
+    assert.equal(body.dataFreshness, 'fresh');
+    assert.equal(typeof body.latestEventAt, 'string');
+    assert.equal(body.collectionState.status, 'idle');
     assert.ok(body.warnings.some(item => item.type === 'high-burn-rate'));
+  } finally {
+    await stopChild(child);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('live API does not cap 24h token event counts at 500', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'token-studio-live-window-'));
+  const dbPath = join(dir, 'usage.sqlite');
+  const port = 6200 + Math.floor(Math.random() * 1000);
+  const db = openDb(dbPath);
+  try {
+    const now = Date.now();
+    for (let index = 0; index < 620; index += 1) {
+      upsertTokenEvent(db, {
+        eventId: `live-window-${index}`,
+        device: 'devbox',
+        source: 'Codex CLI',
+        sessionId: `s${index % 5}`,
+        timestamp: new Date(now - index * 60 * 1000).toISOString(),
+        model: 'gpt-5.3-codex',
+        inputTokens: 100,
+        outputTokens: 20
+      });
+    }
+  } finally {
+    db.close();
+  }
+
+  const child = spawn(process.execPath, ['src/server.mjs'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      DB_PATH: dbPath,
+      SCHEDULED_COLLECT_ENABLED: 'false'
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true
+  });
+
+  try {
+    await waitForLiveApi(port);
+    const response = await fetch(`http://127.0.0.1:${port}/api/live?windowMinutes=1440`);
+    if (!response.ok) assert.fail(await response.text());
+    const body = await response.json();
+    assert.equal(body.totals.requestCount, 620);
+    assert.equal(body.pulse.requestCount, 620);
+    assert.equal(body.bySource[0].requests, 620);
   } finally {
     await stopChild(child);
     rmSync(dir, { recursive: true, force: true });

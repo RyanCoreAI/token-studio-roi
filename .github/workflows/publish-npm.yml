@@ -35,6 +35,12 @@ jobs:
 
       - run: npm run smoke:npx
 
+      - uses: browser-actions/setup-chrome@v1
+
+      - run: npm run smoke:browser
+
+      - run: npm run desktop:smoke
+
       - run: npm pack --dry-run
 
       - run: git diff --check

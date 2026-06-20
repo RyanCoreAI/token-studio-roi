@@ -221,6 +221,7 @@ function initSchema(db) {
     CREATE TABLE IF NOT EXISTS budget_profiles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       source TEXT NOT NULL DEFAULT '',
+      model_group TEXT NOT NULL DEFAULT '',
       label TEXT NOT NULL,
       window_type TEXT NOT NULL DEFAULT 'rolling',
       window_minutes INTEGER NOT NULL DEFAULT 300,
@@ -228,6 +229,7 @@ function initSchema(db) {
       cost_budget_usd REAL NOT NULL DEFAULT 0,
       reset_anchor TEXT,
       warning_threshold REAL NOT NULL DEFAULT 0.75,
+      hard_threshold REAL NOT NULL DEFAULT 1,
       enabled INTEGER NOT NULL DEFAULT 1,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -272,6 +274,8 @@ function initSchema(db) {
   ensureColumn(db, 'session_annotations', 'auto_updated_at', 'TEXT');
   ensureColumn(db, 'budget_profiles', 'reset_anchor', 'TEXT');
   ensureColumn(db, 'budget_profiles', 'warning_threshold', 'REAL NOT NULL DEFAULT 0.75');
+  ensureColumn(db, 'budget_profiles', 'model_group', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'budget_profiles', 'hard_threshold', 'REAL NOT NULL DEFAULT 1');
   ensureColumn(db, 'session_outputs', 'output_type', "TEXT NOT NULL DEFAULT '未分类'");
   db.exec('CREATE INDEX IF NOT EXISTS idx_session_annotations_work ON session_annotations(work_purpose, work_stage, value_level)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_session_annotations_provenance ON session_annotations(annotation_source, annotation_confidence, auto_run_id)');
@@ -1049,6 +1053,7 @@ export function deleteWorkItem(db, row = {}) {
 export function normalizeBudgetProfile(row = {}) {
   const id = normalizeOptionalId(row.id, 'id');
   const source = normalizeOptionalText(row.source, 'source', 120) || '';
+  const modelGroup = normalizeOptionalText(row.modelGroup ?? row.model_group, 'modelGroup', 120) || '';
   const label = normalizedRequiredMax(row.label, 'label', 140);
   const windowType = normalizeEnum(row.windowType ?? row.window_type, BUDGET_WINDOW_TYPES, 'rolling', 'windowType');
   const windowMinutes = normalizePositiveInteger(row.windowMinutes ?? row.window_minutes, 'windowMinutes', 10_080);
@@ -1056,23 +1061,25 @@ export function normalizeBudgetProfile(row = {}) {
   const costBudgetUSD = normalizeNonNegativeNumber(row.costBudgetUSD ?? row.cost_budget_usd, 'costBudgetUSD');
   const resetAnchor = normalizeResetAnchor(row.resetAnchor ?? row.reset_anchor, windowType);
   const warningThreshold = normalizeWarningThreshold(row.warningThreshold ?? row.warning_threshold);
+  const hardThreshold = normalizeHardThreshold(row.hardThreshold ?? row.hard_threshold);
   const enabled = normalizeBoolean(row.enabled, true);
   if (tokenBudget === 0 && costBudgetUSD === 0) {
     throw new Error('tokenBudget or costBudgetUSD must be greater than 0');
   }
-  return { id, source, label, windowType, windowMinutes, tokenBudget, costBudgetUSD, resetAnchor, warningThreshold, enabled };
+  return { id, source, modelGroup, label, windowType, windowMinutes, tokenBudget, costBudgetUSD, resetAnchor, warningThreshold, hardThreshold, enabled };
 }
 
 export function upsertBudgetProfile(db, row = {}) {
   const profile = normalizeBudgetProfile(row);
   db.prepare(`
     INSERT INTO budget_profiles (
-      id, source, label, window_type, window_minutes,
-      token_budget, cost_budget_usd, reset_anchor, warning_threshold,
+      id, source, model_group, label, window_type, window_minutes,
+      token_budget, cost_budget_usd, reset_anchor, warning_threshold, hard_threshold,
       enabled, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
       source = excluded.source,
+      model_group = excluded.model_group,
       label = excluded.label,
       window_type = excluded.window_type,
       window_minutes = excluded.window_minutes,
@@ -1080,11 +1087,13 @@ export function upsertBudgetProfile(db, row = {}) {
       cost_budget_usd = excluded.cost_budget_usd,
       reset_anchor = excluded.reset_anchor,
       warning_threshold = excluded.warning_threshold,
+      hard_threshold = excluded.hard_threshold,
       enabled = excluded.enabled,
       updated_at = datetime('now')
   `).run(
     profile.id,
     profile.source,
+    profile.modelGroup,
     profile.label,
     profile.windowType,
     profile.windowMinutes,
@@ -1092,6 +1101,7 @@ export function upsertBudgetProfile(db, row = {}) {
     profile.costBudgetUSD,
     profile.resetAnchor,
     profile.warningThreshold,
+    profile.hardThreshold,
     profile.enabled ? 1 : 0
   );
   const id = profile.id ?? db.prepare('SELECT last_insert_rowid() AS id').get().id;
@@ -1101,13 +1111,16 @@ export function upsertBudgetProfile(db, row = {}) {
 export function getBudgetProfile(db, id) {
   const profileId = normalizeRequiredId(id, 'id');
   const row = db.prepare(`
-    SELECT id, source, label,
+    SELECT id, source,
+      model_group AS modelGroup,
+      label,
       window_type AS windowType,
       window_minutes AS windowMinutes,
       token_budget AS tokenBudget,
       cost_budget_usd AS costBudgetUSD,
       reset_anchor AS resetAnchor,
       warning_threshold AS warningThreshold,
+      hard_threshold AS hardThreshold,
       enabled,
       updated_at AS updatedAt
     FROM budget_profiles
@@ -1118,13 +1131,16 @@ export function getBudgetProfile(db, id) {
 
 export function listBudgetProfiles(db) {
   return db.prepare(`
-    SELECT id, source, label,
+    SELECT id, source,
+      model_group AS modelGroup,
+      label,
       window_type AS windowType,
       window_minutes AS windowMinutes,
       token_budget AS tokenBudget,
       cost_budget_usd AS costBudgetUSD,
       reset_anchor AS resetAnchor,
       warning_threshold AS warningThreshold,
+      hard_threshold AS hardThreshold,
       enabled,
       updated_at AS updatedAt
     FROM budget_profiles
@@ -1335,6 +1351,15 @@ function normalizeWarningThreshold(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0 || number > 1) {
     throw new Error('warningThreshold must be greater than 0 and no greater than 1');
+  }
+  return number;
+}
+
+function normalizeHardThreshold(value) {
+  if (value == null || value === '') return 1;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0.5 || number > 2) {
+    throw new Error('hardThreshold must be at least 0.5 and no greater than 2');
   }
   return number;
 }

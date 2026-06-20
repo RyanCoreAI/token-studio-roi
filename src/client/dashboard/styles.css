@@ -2346,8 +2346,18 @@ button, input, select { font-family: inherit; color: inherit; }
   overflow-wrap: anywhere;
 }
 
-.source-health-card.status-import-only {
+.source-health-card.status-import-only,
+.source-health-card.status-ccusage-importable {
   border-color: color-mix(in oklab, var(--c-indigo), transparent 70%);
+}
+
+.source-health-card.status-experimental-audit {
+  border-color: color-mix(in oklab, var(--warn), transparent 66%);
+}
+
+.source-health-card.status-detected-only,
+.source-health-card.status-unsupported {
+  opacity: 0.92;
 }
 
 .source-health-card.health-has-data {

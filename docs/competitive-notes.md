@@ -78,10 +78,25 @@ v4.8 makes the public launch path easier to try and easier to explain:
 
 This narrows the most visible competitor gap, one-command startup and coverage clarity, without pretending that detected-only sources are real collectors.
 
+## v6 Coverage Catch-up And Desktop Pulse Bet
+
+v6 is the only approved large follow-up after the v5 local ROI baseline. It does not chase leaderboards, cloud sync, accounts, or a full TUI. It narrows two gaps that repeatedly show up in competitor comparisons:
+
+- Coverage perception: users should know whether a source is native trusted, ccusage importable, experimental, detected-only, or unsupported/no-token-field.
+- Live desktop entry: users who like menu-bar or widget-style workflows get a local companion without turning Token Studio into a cloud desktop product.
+
+The v6 controls are:
+
+- Desktop Pulse only reads the existing local API and SQLite-derived `/api/live` data.
+- Desktop Pulse does not run `collect` automatically.
+- Cyberpunk styling is limited to live surfaces: browser `/live` and Electron Desktop Pulse. Dashboard, Trust, and Review keep the Claude-like audit-oriented interface.
+- Budgets remain custom guardrails, not provider subscription quotas.
+- Detected-only and experimental sources still cannot write usage unless reliable token fields are proven.
+
 ## Remaining Gaps
 
 - Collector depth is still behind the broadest multi-tool products. v4.8 improves breadth through Source Health plus ccusage JSON/CLI bridge and detected-only coverage, but Token Studio's own stable collectors remain narrower than ccusage or TokenTracker.
 - Live monitoring is intentionally lightweight; it is a guardrail for current burn rate, not an exact subscription predictor.
-- Desktop packaging is not included. Keep the public story focused on local browser + CLI first.
+- Desktop packaging starts as an Electron companion and separate GitHub Release asset path. It is intentionally not part of the npm tarball.
 - Automatic attribution is rule-based and should always display provenance and confidence.
 - Savings simulation depends on official public token prices and structured metadata; it is useful for strategy, not proof of actual invoice savings.

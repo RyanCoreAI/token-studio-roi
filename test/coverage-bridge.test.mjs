@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildCoverageBridge } from '../src/coverage-bridge.mjs';
 
-test('coverage bridge separates native trusted, importable, detected-only and unsupported sources', () => {
+test('coverage bridge separates native trusted, importable, experimental, detected-only and unsupported sources', () => {
   const bridge = buildCoverageBridge({
     sourceHealth: [
       {
@@ -40,7 +40,8 @@ test('coverage bridge separates native trusted, importable, detected-only and un
 
   assert.equal(bridge.summary.nativeTrusted, 1);
   assert.equal(bridge.summary.importable, 1);
-  assert.equal(bridge.summary.detectedOnly, 1);
+  assert.equal(bridge.summary.experimental, 1);
+  assert.equal(bridge.summary.detectedOnly, 0);
   assert.equal(bridge.summary.unsupported, 1);
   assert.equal(bridge.summary.sourcesWithUsage, 1);
   assert.equal(bridge.summary.successfulCoverage, 1);
@@ -51,8 +52,8 @@ test('coverage bridge separates native trusted, importable, detected-only and un
   assert.equal(bridge.rows.find(row => row.id === 'ccusage').workflow.state, 'import-json');
   assert.equal(bridge.rows.find(row => row.id === 'ccusage').importReports.length, 5);
   assert.match(bridge.rows.find(row => row.id === 'ccusage').importReports[0].exportCommand, /ccusage@latest daily --json --no-cost/);
-  assert.match(bridge.rows.find(row => row.id === 'cursor').recommendedAction, /不要把它当作已覆盖/);
+  assert.match(bridge.rows.find(row => row.id === 'cursor').recommendedAction, /collector audit/);
   assert.equal(bridge.rows.find(row => row.id === 'cursor').successfulCoverage, false);
-  assert.equal(bridge.rows.find(row => row.id === 'cursor').workflow.state, 'bridge-recommended');
-  assert.match(bridge.rows.find(row => row.id === 'cursor').failureReason, /可靠 token 字段/);
+  assert.equal(bridge.rows.find(row => row.id === 'cursor').workflow.state, 'audit-required');
+  assert.match(bridge.rows.find(row => row.id === 'cursor').failureReason, /实验来源/);
 });

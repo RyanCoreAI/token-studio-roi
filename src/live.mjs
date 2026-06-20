@@ -13,7 +13,13 @@ export function buildLiveSnapshot({
   budgetProfiles = [],
   now = new Date(),
   windowMinutes = DEFAULT_WINDOW_MINUTES,
-  guardrailConfig = liveGuardrailConfig()
+  guardrailConfig = liveGuardrailConfig(),
+  latestEventAt = null,
+  latestCollectionRunAt = null,
+  collectionState = null,
+  refreshIntervalSeconds = 60,
+  autoCollectEnabled = false,
+  demoMode = false
 } = {}) {
   const nowMs = new Date(now).getTime();
   const windowMs = Math.max(1, Number(windowMinutes) || DEFAULT_WINDOW_MINUTES) * 60 * 1000;
@@ -42,6 +48,7 @@ export function buildLiveSnapshot({
     }));
 
   const totals = sumRows(recentEvents.length ? recentEvents : recentSessions);
+  const requestCount = recentEvents.length || recentSessions.length;
   const cacheDenominator = totals.inputTokens + totals.cacheReadTokens + totals.cacheCreationTokens;
 
   const budgetWindows = buildBudgetWindows({
@@ -54,11 +61,23 @@ export function buildLiveSnapshot({
     generatedAt: new Date(nowMs).toISOString(),
     windowMinutes,
     status: activeSessions.length || recentEvents.length ? 'active' : 'idle',
+    demoMode: Boolean(demoMode),
+    autoCollectEnabled: Boolean(autoCollectEnabled),
+    latestEventAt,
+    latestCollectionRunAt,
+    refreshIntervalSeconds,
+    collectionState: sanitizeCollectionState(collectionState),
     totals: {
       ...totals,
+      requestCount,
       burnRateTokensPerHour: Math.round((totals.totalTokens / windowMinutes) * 60),
       cacheHitRate: cacheDenominator ? (totals.cacheReadTokens / cacheDenominator) * 100 : 0
     },
+    pulse: buildPulseWindow({
+      rows: recentEvents.length ? recentEvents : recentSessions,
+      nowMs,
+      windowMinutes
+    }),
     activeSessions,
     bySource: sourceRows,
     byModel: modelRows,
@@ -66,11 +85,83 @@ export function buildLiveSnapshot({
     recentEvents: recentEvents.slice(0, 25).map(stripRuntimeFields),
     latestRun: runs[0] || null
   };
+  const freshness = buildLiveDataFreshness({
+    nowMs,
+    recentTokenTotal: totals.totalTokens,
+    recentEventCount: recentEvents.length,
+    tokenEventCount: normalizedEvents.length,
+    latestEventAt,
+    latestCollectionRunAt,
+    collectionState,
+    refreshIntervalSeconds,
+    demoMode
+  });
   const guardrails = liveGuardrailConfig(guardrailConfig);
   return {
     ...snapshot,
+    ...freshness,
     guardrails,
     warnings: buildLiveGuardrails(snapshot, guardrails)
+  };
+}
+
+export function buildLiveDataFreshness({
+  nowMs = Date.now(),
+  recentTokenTotal = 0,
+  recentEventCount = 0,
+  tokenEventCount = 0,
+  latestEventAt = null,
+  latestCollectionRunAt = null,
+  collectionState = null,
+  refreshIntervalSeconds = 60,
+  demoMode = false
+} = {}) {
+  const intervalMs = Math.max(30, Number(refreshIntervalSeconds) || 60) * 1000;
+  const collectionStatus = collectionState?.status || null;
+  const latestRunMs = dateMs(latestCollectionRunAt);
+  const latestEventMs = dateMs(latestEventAt);
+
+  if (collectionStatus === 'running') {
+    return {
+      dataFreshness: 'collecting',
+      staleReason: '正在刷新本地 Claude/Codex 结构化 token 日志。'
+    };
+  }
+  if (collectionStatus === 'error') {
+    return {
+      dataFreshness: 'error',
+      staleReason: collectionState?.message || '最近一次本地刷新失败，请打开 /trust 查看原因。'
+    };
+  }
+  if (recentEventCount > 0 || Number(recentTokenTotal || 0) > 0) {
+    return {
+      dataFreshness: 'fresh',
+      staleReason: null
+    };
+  }
+  if (!tokenEventCount && !latestEventMs) {
+    return {
+      dataFreshness: 'empty',
+      staleReason: demoMode
+        ? 'Demo 或空库没有最近事件；这不代表真实采集成功。'
+        : 'SQLite 还没有 event 级 token 数据。'
+    };
+  }
+  if (!latestRunMs) {
+    return {
+      dataFreshness: 'stale',
+      staleReason: '有历史 token_events，但当前服务还没有可见的采集运行记录。'
+    };
+  }
+  if (nowMs - latestRunMs > intervalMs * 2) {
+    return {
+      dataFreshness: 'stale',
+      staleReason: '最近窗口没有 token，且距离上次后台刷新已超过两个刷新周期。'
+    };
+  }
+  return {
+    dataFreshness: 'fresh',
+    staleReason: '最近窗口没有新 token；历史事件仍在 SQLite 中。'
   };
 }
 
@@ -179,11 +270,13 @@ export function buildBudgetWindows({ rows = [], budgetProfiles = [], nowMs = Dat
       const windowMinutes = positiveNumber(profile.windowMinutes, 300);
       const frame = budgetWindowFrame(profile, nowMs, windowMinutes);
       const source = String(profile.source || '').trim();
+      const modelGroup = String(profile.modelGroup || profile.model_group || '').trim();
       const matching = rows.filter(row => {
         const timestampMs = row.timestampMs ?? row.lastActivityMs ?? 0;
         return timestampMs >= frame.startMs
           && timestampMs <= nowMs
-          && (!source || row.source === source);
+          && (!source || row.source === source)
+          && modelMatchesGroup(row.model, modelGroup);
       });
       const totals = sumRows(matching);
       const firstMs = frame.windowType === 'fixed'
@@ -198,19 +291,21 @@ export function buildBudgetWindows({ rows = [], budgetProfiles = [], nowMs = Dat
       const tokenBudget = number(profile.tokenBudget);
       const costBudgetUSD = number(profile.costBudgetUSD);
       const warningThreshold = threshold(profile.warningThreshold, 0.75);
+      const hardThreshold = hardThresholdValue(profile.hardThreshold);
       const tokenShare = tokenBudget ? totals.totalTokens / tokenBudget : 0;
       const costShare = costBudgetUSD ? totals.costUSD / costBudgetUSD : 0;
       const projectedTokenShare = tokenBudget ? projectedTokens / tokenBudget : 0;
       const projectedCostShare = costBudgetUSD ? projectedCostUSD / costBudgetUSD : 0;
       const currentShare = Math.max(tokenShare, costShare);
       const projectedShare = Math.max(projectedTokenShare, projectedCostShare);
-      const status = currentShare >= 1 ? 'exceeded'
-        : projectedShare >= 1 ? 'over-pace'
+      const status = currentShare >= hardThreshold ? 'exceeded'
+        : projectedShare >= hardThreshold ? 'over-pace'
           : currentShare >= warningThreshold ? 'near-limit'
             : 'ok';
       return {
         id: profile.id ?? null,
         source,
+        modelGroup,
         label: profile.label || (source ? `${source} budget` : 'Token budget'),
         windowType: frame.windowType,
         windowMinutes,
@@ -219,6 +314,7 @@ export function buildBudgetWindows({ rows = [], budgetProfiles = [], nowMs = Dat
         windowStart: new Date(frame.startMs).toISOString(),
         windowEnd: new Date(frame.endMs).toISOString(),
         resetInMinutes: frame.resetInMinutes,
+        hardThreshold,
         totalTokens: totals.totalTokens,
         costUSD: totals.costUSD,
         burnRateTokensPerHour,
@@ -362,10 +458,11 @@ function aggregate(rows, field) {
   for (const row of rows) {
     const key = row[field] || 'unknown';
     if (!byKey.has(key)) {
-      byKey.set(key, { key, sessions: new Set(), totalTokens: 0, costUSD: 0 });
+      byKey.set(key, { key, sessions: new Set(), requests: 0, totalTokens: 0, costUSD: 0 });
     }
     const target = byKey.get(key);
     target.sessions.add(row.sessionId);
+    target.requests += 1;
     target.totalTokens += row.totalTokens;
     target.costUSD += row.costUSD;
   }
@@ -373,11 +470,69 @@ function aggregate(rows, field) {
     .map(row => ({
       key: row.key,
       sessions: row.sessions.size,
+      requests: row.requests,
       totalTokens: row.totalTokens,
       costUSD: row.costUSD
     }))
     .sort((a, b) => b.totalTokens - a.totalTokens)
     .slice(0, 10);
+}
+
+function buildPulseWindow({ rows = [], nowMs = Date.now(), windowMinutes = DEFAULT_WINDOW_MINUTES } = {}) {
+  const safeWindowMinutes = Math.max(1, Number(windowMinutes) || DEFAULT_WINDOW_MINUTES);
+  const windowMs = safeWindowMinutes * 60 * 1000;
+  const startMs = nowMs - windowMs;
+  const chartBucketCount = safeWindowMinutes >= 1440 ? 24 : Math.max(6, Math.min(24, Math.ceil(safeWindowMinutes / 5)));
+  const chartBucketMs = windowMs / chartBucketCount;
+  const chartBuckets = Array.from({ length: chartBucketCount }, (_, index) => {
+    const bucketStartMs = startMs + index * chartBucketMs;
+    return {
+      index,
+      start: new Date(bucketStartMs).toISOString(),
+      label: formatBucketLabel(bucketStartMs),
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      totalTokens: 0,
+      costUSD: 0,
+      requests: 0
+    };
+  });
+
+  const activityBucketMinutes = safeWindowMinutes >= 1440 ? 15 : Math.max(1, Math.min(5, Math.ceil(safeWindowMinutes / 12)));
+  const activityBucketMs = activityBucketMinutes * 60 * 1000;
+  const activityBuckets = new Set();
+
+  for (const row of rows) {
+    const timestampMs = row.timestampMs ?? row.lastActivityMs ?? 0;
+    if (!timestampMs || timestampMs < startMs || timestampMs > nowMs) continue;
+    const chartIndex = Math.min(chartBucketCount - 1, Math.max(0, Math.floor((timestampMs - startMs) / chartBucketMs)));
+    chartBuckets[chartIndex].inputTokens += number(row.inputTokens);
+    chartBuckets[chartIndex].outputTokens += number(row.outputTokens);
+    chartBuckets[chartIndex].cacheReadTokens += number(row.cacheReadTokens);
+    chartBuckets[chartIndex].totalTokens += number(row.totalTokens);
+    chartBuckets[chartIndex].costUSD += number(row.costUSD);
+    chartBuckets[chartIndex].requests += 1;
+    const activityIndex = Math.max(0, Math.floor((timestampMs - startMs) / activityBucketMs));
+    activityBuckets.add(activityIndex);
+  }
+
+  const activeMinutes = Math.min(safeWindowMinutes, activityBuckets.size * activityBucketMinutes);
+  const utilization = safeWindowMinutes ? activeMinutes / safeWindowMinutes : 0;
+
+  return {
+    windowMinutes: safeWindowMinutes,
+    windowHours: safeWindowMinutes / 60,
+    requestCount: rows.length,
+    timeline: chartBuckets,
+    agent: {
+      activeMinutes,
+      activeHours: activeMinutes / 60,
+      utilization,
+      utilizationPercent: utilization * 100,
+      bucketMinutes: activityBucketMinutes
+    }
+  };
 }
 
 function sumRows(rows) {
@@ -405,6 +560,18 @@ function stripRuntimeFields(row) {
   return rest;
 }
 
+function sanitizeCollectionState(state) {
+  if (!state) return null;
+  return {
+    status: state.status || 'idle',
+    message: state.message || null,
+    startedAt: state.startedAt || null,
+    finishedAt: state.finishedAt || null,
+    exitCode: state.exitCode ?? null,
+    summary: state.summary || null
+  };
+}
+
 function dateMs(value) {
   const ms = new Date(value || 0).getTime();
   return Number.isFinite(ms) ? ms : 0;
@@ -430,6 +597,11 @@ function threshold(value, fallback) {
   return Number.isFinite(number) && number > 0 && number <= 1 ? number : fallback;
 }
 
+function hardThresholdValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0.5 && number <= 2 ? number : 1;
+}
+
 function isUnpricedModel(model) {
   const value = String(model || '').trim();
   if (!value || value === 'unknown') return false;
@@ -442,6 +614,44 @@ function isHeavyModel(model) {
   return value.includes('opus') || value.includes('gpt-5.5');
 }
 
+function isLightModel(model) {
+  const value = String(model || '').toLowerCase();
+  return value.includes('haiku')
+    || value.includes('flash')
+    || value.includes('spark')
+    || value.includes('deepseek')
+    || value.includes('mimo');
+}
+
+function isMidModel(model) {
+  const value = String(model || '').toLowerCase();
+  return value.includes('sonnet')
+    || value.includes('gpt-5.3')
+    || value.includes('codex');
+}
+
+function modelMatchesGroup(model, modelGroup) {
+  const group = String(modelGroup || '').trim().toLowerCase();
+  if (!group || group === 'all') return true;
+  if (group === 'heavy') return isHeavyModel(model);
+  if (group === 'light') return isLightModel(model);
+  if (group === 'mid' || group === 'medium') return isMidModel(model) && !isHeavyModel(model);
+  if (group === 'priced') return !isUnpricedModel(model);
+  if (group === 'unpriced') return isUnpricedModel(model);
+  return String(model || '').toLowerCase().includes(group);
+}
+
 function formatInt(value) {
   return Math.round(Number(value || 0)).toLocaleString('en-US');
+}
+
+function formatBucketLabel(ms) {
+  const date = new Date(ms);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date);
 }

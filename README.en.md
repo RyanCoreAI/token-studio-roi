@@ -29,13 +29,13 @@ By default it does not read, display, or upload conversation content; it only re
 
 See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller competitor reference and differentiation notes.
 
-v5.9 is the local feature-freeze point. Token Studio will not keep expanding just because competitors have desktop apps, leaderboards, full TUIs, or more detected-only sources. Maintenance stays limited to real bugs, privacy/security, official price updates, and upstream log-format changes. See [docs/final-review.md](docs/final-review.md).
+v5.9 is the Web/CLI ROI review baseline. v6 adds only two explicit improvements: Coverage Catch-up and the optional Desktop Pulse companion; `v6.0.6` is the live/Pulse stabilization build and does not continue feature expansion. It still avoids leaderboards, cloud sync, accounts, multi-user features, and fake collector coverage. See [docs/final-review.md](docs/final-review.md).
 
 ## What Makes ROI Different?
 
-v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence Flywheel make it clear whether data exists, where it came from, and whether it is enough for ROI decisions. v5.9.1 is the final public release candidate; publishing requires the local gate, GitHub release gate, tarball smoke, and npm post-publish smoke.
+Token Studio focuses on reviewable evidence, not only metering. Coverage Catch-up + Evidence Flywheel make it clear whether data exists, where it came from, and whether it is enough for ROI decisions. v6 adds an optional Desktop Pulse entry without changing the v5 review spine; publishing requires the local gate, GitHub release gate, tarball smoke, and npm post-publish smoke.
 
-- **Coverage Bridge Center**: separates sources into native trusted collection, ccusage importable, detected-only, and unsupported/no-token-field states so directory detection is not mistaken for real usage coverage.
+- **Coverage Catch-up Center**: separates sources into native trusted collection, ccusage importable, experimental audit, detected-only, and unsupported/no-token-field states so directory detection is not mistaken for real usage coverage.
 - **Coverage Bridge Workflow**: each source shows successful coverage, failure reasons, importable reports, and copy-only commands; the browser generates commands but never runs external scanners.
 - **Local Trust Workbench**: shows data mode, coverage gate, daily/session/event reconciliation, source failure reasons, and sanitized sample rows before making ROI claims.
 - **Evidence Flywheel**: connects real tokens, project identification, automatic evidence, confirmation drafts, output links, and model-strategy samples on `/review`.
@@ -51,6 +51,9 @@ v5 focuses on reviewable evidence, not only metering. Coverage Bridge + Evidence
 - **Collection Coverage Gate**: run `token-studio coverage` before real import/apply to verify whether Claude/Codex have event-level history and whether Cursor is only detected without reliable token fields.
 - **Import / Budget Wizard**: paste or upload ccusage JSON in the Dashboard, dry-run first, inspect shape/session/event counts, unsafe fields, and unpriced models, then explicitly apply to SQLite.
 - **Quota Profiles v2**: supports rolling/fixed custom guardrail windows, reset anchors, warning thresholds, burn projection, reset countdown, and near/over/exceeded warnings on `/live`.
+- **Quota Profiles v3**: budget windows can filter by source and model group, with warning and hard thresholds; these remain user-defined guardrails, not provider subscription quotas.
+- **Desktop Pulse Companion**: optional Electron tray/window entry that reuses local `/live`, `/trust`, and `/review`; it does not duplicate collectors, but it asks the local service to refresh trusted Claude/Codex structured token metadata under the same safety rules and never uploads data.
+- **Cyberpunk Live / Pulse UI**: the cyberpunk look is used for browser `/live` and Electron Desktop Pulse; Dashboard, Trust, and Review keep the calmer Claude-like review/audit UI.
 - **Statusline Guardrails**: `token-studio statusline` prints recent-window tokens, burn rate, cache, budget usage, unpriced-model warnings, and open actions for terminal prompts, tmux, or Claude Code statusline.
 - **ROI Playbook Export**: `token-studio policy` exports Markdown, Claude Code, or AGENTS-style model-use snippets without editing project files.
 - **Advisor Action Loop**: turns Savings Simulator and ROI Advisor recommendations into open/done/dismissed actions and includes them in weekly Markdown reports.
@@ -103,9 +106,20 @@ git clone https://github.com/RyanCoreAI/token-studio-roi.git
 cd token-studio-roi
 npm install
 node src/cli.mjs
+npm run desktop
 ```
 
-`npx token-studio` scans structured token metadata from local `.claude`, `.codex`, and Cursor locations; it automatically writes only trusted Claude/Codex event-level records, while Cursor without explicit token fields stays detected/no-token-fields. `--no-collect` starts an existing SQLite database only, `--dry-run-only` runs coverage without writing, and `demo` uses synthetic data. The default DB path is `data/usage.sqlite` under the command's working directory; use `--db` or `DB_PATH` to choose another location. The Dashboard shows a data-source status: Demo Mode, Empty DB, Real DB - aggregate only, Real DB - event data needs coverage, or Real DB - event verified. `event verified` requires token events plus a passed coverage gate or a verifiable collect run. The `ccusage-cli` bridge explicitly runs the external ccusage local scanner; Token Studio only accepts structured JSON, rejects conversation-like fields, and ignores third-party cost fields.
+### Local Browser App vs Desktop App
+
+| Entry | Best for | What it does | Status |
+|---|---|---|---|
+| `npx token-studio` / `node src/cli.mjs` | Most users | Runs read-only coverage and trusted Claude/Codex apply before startup, then refreshes trusted event-level token metadata every 60 seconds while the local service is running | Primary entry |
+| `npx token-studio demo` | First product walkthrough | Starts synthetic demo data only; it does not prove real collection worked | Demo entry |
+| `npm run desktop` | Local users who want a tray/window pulse | Starts or reuses the local service, opens a compact Desktop Pulse window, and enables 60-second trusted Claude/Codex metadata refresh when it starts the service | Optional MVP |
+
+The desktop app is not meant to replace the browser workspace. Full review, evidence queues, imports, and reports still belong in the Web App. Desktop Pulse is only for the “I do not want a browser tab open, but I want to know whether today’s token usage is getting out of control” use case. Browser `/live` and Desktop Pulse now share the same dark Pulse dashboard. Pulse does not read process memory; it refreshes local logs into SQLite and then reads the recent window, so a 5-60 second delay is normal. It is not yet a one-click packaged desktop installer in the npm distribution; a public desktop release should be shipped later as GitHub Release assets after desktop smoke and privacy checks.
+
+`npx token-studio` scans structured token metadata from local `.claude`, `.codex`, and Cursor locations; it automatically writes only trusted Claude/Codex event-level records, while Cursor without explicit token fields stays detected/no-token-fields. The default real entry keeps refreshing trusted Claude/Codex event-level metadata every 60 seconds; `TOKEN_STUDIO_LIVE_COLLECT_INTERVAL_SECONDS` can override the interval with a 30-second minimum. `start`, `--no-collect`, `--dry-run-only`, and `demo` do not run the background refresh. The default DB path is `data/usage.sqlite` under the command's working directory; use `--db` or `DB_PATH` to choose another location. The Dashboard shows a data-source status: Demo Mode, Empty DB, Real DB - aggregate only, Real DB - event data needs coverage, or Real DB - event verified. `event verified` requires token events plus a passed coverage gate or a verifiable collect run. The `ccusage-cli` bridge explicitly runs the external ccusage local scanner; Token Studio only accepts structured JSON, rejects conversation-like fields, and ignores third-party cost fields.
 
 See [docs/first-run.md](docs/first-run.md) for the first-run flow. The Dashboard also derives first-run guidance from the current database: no data points to demo/import, data without actions points to `/review`, and budgets without event-level live data explain the `/live` window behavior.
 
@@ -119,7 +133,7 @@ These screenshots are from demo mode or sanitized synthetic data, not real local
 
 ![Token Studio ROI review](docs/assets/token-studio-v59-review.png)
 
-![Token Studio ROI live guardrails](docs/assets/token-studio-v59-live.png)
+![Token Studio ROI live pulse](docs/assets/token-studio-v606-live-pulse.png)
 
 Real local validation screenshots are for pre-release verification, not the default public hero assets. They may contain model names, project aliases, and aggregate token counts, but must not contain prompts, responses, transcripts, diffs, full local paths, or private exported reports.
 
@@ -221,7 +235,7 @@ Stable interfaces:
 - `POST /api/work-items/link-sessions`
 - `DELETE /api/work-items/:id`
 
-All non-public `/api/*` read APIs also require loopback requests and local Origin. All local write APIs remain loopback-only, local-Origin-only, and JSON-only. The server does not trust `X-Forwarded-For` for local access checks. By default the server binds only to `127.0.0.1`; `HOST=0.0.0.0` or any other non-loopback bind is refused unless `TOKEN_STUDIO_ALLOW_REMOTE=1` and `INGEST_TOKEN` are both set. That remote mode is reserved for explicit ingest scenarios and does not turn ordinary Dashboard APIs into remotely accessible APIs.
+All non-public `/api/*` read APIs also require loopback requests and local Origin. Normal write APIs remain loopback-only, local-Origin-only, and JSON-only. `/api/ingest` is disabled by default and only accepts JSON machine writes when `INGEST_TOKEN` is set and the request sends `Authorization: Bearer <token>`. The server does not trust `X-Forwarded-For` for local access checks. By default the server binds only to `127.0.0.1`; `HOST=0.0.0.0` or any other non-loopback bind is refused unless `TOKEN_STUDIO_ALLOW_REMOTE=1` and `INGEST_TOKEN` are both set. That remote mode is reserved for explicit ingest scenarios and does not turn ordinary Dashboard APIs into remotely accessible APIs.
 
 ## Development
 
@@ -252,13 +266,15 @@ Default URLs:
 - [ ] `node src/cli.mjs coverage --sources=claude,codex,cursor --json`
 - [ ] `npm run smoke:npx`
 - [ ] `npm run smoke:browser`
+- [ ] `npm run desktop:smoke`
 - [ ] `npm audit --audit-level=low`
 - [ ] `npm view token-studio version` is lower than this package version before publishing
 - [ ] `npm pack --dry-run`
-- [ ] `npm run smoke:published -- --version 5.9.1` after npm publish
+- [ ] `npm run smoke:published -- --version 6.0.6` after npm publish
 - [ ] demo screenshots come from demo mode
 - [ ] real validation screenshots are inspected and contain no transcript, diff, prompt, full path, or private export
 - [ ] `/live` loads from demo mode or temporary SQLite
+- [ ] Desktop Pulse uses only local `127.0.0.1` URLs and passes Electron security smoke
 - [ ] no real `data/usage.sqlite`
 - [ ] no `.claude/`, `.codex/`, `.env`
 - [ ] no raw conversation content

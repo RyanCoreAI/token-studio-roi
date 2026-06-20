@@ -468,17 +468,27 @@ async function handleApi(req, url, res) {
   }
   if (url.pathname === '/api/live' && req.method === 'GET') {
     if (!validateLocalRead(req, res, '实时监控接口')) return;
+    const schedule = scheduledCollectConfig();
+    const latestRun = latestCollectionRun();
+    const windowMinutes = Number(url.searchParams.get('windowMinutes') || 15);
+    const budgetProfiles = listBudgetProfiles(db).filter(profile => profile.enabled);
     sendJson(res, buildLiveSnapshot({
       sessions: liveSessions(),
-      tokenEvents: liveTokenEvents(),
-      budgetProfiles: listBudgetProfiles(db).filter(profile => profile.enabled),
+      tokenEvents: liveTokenEvents({ windowMinutes, budgetProfiles }),
+      budgetProfiles,
       runs: all(`
         SELECT device, source, status, message, collected_at AS collectedAt
         FROM collection_runs
         ORDER BY id DESC
         LIMIT 5
       `),
-      windowMinutes: Number(url.searchParams.get('windowMinutes') || 15)
+      windowMinutes,
+      latestEventAt: latestTokenEventAt(),
+      latestCollectionRunAt: collectionState.finishedAt || latestRun?.collectedAt || null,
+      collectionState,
+      refreshIntervalSeconds: schedule.intervalSeconds,
+      autoCollectEnabled: schedule.enabled,
+      demoMode: process.env.TOKEN_STUDIO_DEMO_MODE === '1'
     }));
     return;
   }
@@ -1026,6 +1036,7 @@ function startCollection({ reason = 'manual', requireBackup = false } = {}) {
 }
 
 function startScheduledCollect() {
+  if (process.env.TOKEN_STUDIO_DEMO_MODE === '1') return;
   const schedule = scheduledCollectConfig();
   if (!schedule.enabled) return;
 
@@ -1033,10 +1044,10 @@ function startScheduledCollect() {
 
   const run = () => {
     try {
-      const started = startCollection({ reason: 'scheduled', requireBackup: true });
+      const started = startCollection({ reason: 'scheduled', requireBackup: false });
       if (!started) console.log('[collect:schedule] skipped because a collection is already running');
     } catch (error) {
-      console.log(`[collect:schedule] skipped because backup failed: ${error.message}`);
+      console.log(`[collect:schedule] skipped: ${error.message}`);
     }
   };
 
@@ -1051,9 +1062,10 @@ function scheduledCollectConfig() {
   const config = loadCollectorConfig().scheduledCollect || {};
   const enabled = envBool('SCHEDULED_COLLECT_ENABLED', config.enabled ?? false);
   const intervalSeconds = Math.max(
-    10,
+    30,
     envNumber('SCHEDULED_COLLECT_INTERVAL_SECONDS',
-      envNumber('COLLECT_INTERVAL_SECONDS', config.intervalSeconds ?? 300))
+      envNumber('TOKEN_STUDIO_LIVE_COLLECT_INTERVAL_SECONDS',
+        envNumber('COLLECT_INTERVAL_SECONDS', config.intervalSeconds ?? 300)))
   );
   const runOnStart = envBool('SCHEDULED_COLLECT_RUN_ON_START', config.runOnStart ?? false);
   return { enabled, intervalSeconds, runOnStart };
@@ -1076,22 +1088,10 @@ function envNumber(name, fallback) {
 }
 
 async function handleIngest(req, res) {
-  if (!isJsonRequest(req)) {
-    sendJson(res, { error: 'Content-Type must be application/json' }, 415);
-    return;
-  }
-
-  const expectedToken = process.env.INGEST_TOKEN;
-  if (expectedToken) {
-    const actualToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (actualToken !== expectedToken) {
-      sendJson(res, { error: 'Unauthorized' }, 401);
-      return;
-    }
-  }
+  if (!validateIngestJsonWrite(req, res)) return;
 
   try {
-    const payload = await readJson(req);
+    const payload = await readJson(req, 8 * 1024 * 1024);
     const dailyRows = Array.isArray(payload.daily) ? payload.daily : [];
     const sessionRows = Array.isArray(payload.sessions) ? payload.sessions : [];
     const runRows = Array.isArray(payload.runs) ? payload.runs : [];
@@ -1157,8 +1157,14 @@ function liveSessions() {
   }));
 }
 
-function liveTokenEvents() {
-  return all(`
+function liveTokenEvents({ windowMinutes = 15, budgetProfiles = [] } = {}) {
+  const windows = [
+    Number(windowMinutes),
+    ...budgetProfiles.map(profile => Number(profile.windowMinutes))
+  ].filter(value => Number.isFinite(value) && value > 0);
+  const maxWindowMinutes = Math.min(10_080, Math.max(1, ...windows));
+  const since = new Date(Date.now() - maxWindowMinutes * 60 * 1000).toISOString();
+  return db.prepare(`
     SELECT event_id AS eventId, device, source, session_id AS sessionId,
       timestamp, model,
       input_tokens AS inputTokens,
@@ -1169,9 +1175,9 @@ function liveTokenEvents() {
       tool_category AS toolCategory,
       file_extension AS fileExtension
     FROM token_events
+    WHERE timestamp >= ?
     ORDER BY timestamp DESC
-    LIMIT 500
-  `);
+  `).all(since);
 }
 
 function buildLocalTrustPayload() {
@@ -1322,7 +1328,7 @@ function serverSecurityMetadata() {
     ingestTokenConfigured,
     dashboardApiRemoteAccess: false,
     readGuard: 'loopback + local Origin',
-    writeGuard: 'loopback + local Origin + JSON',
+    writeGuard: 'local writes: loopback + local Origin + JSON; ingest: disabled unless INGEST_TOKEN Bearer JSON',
     xForwardedForTrusted: false
   };
 }
@@ -1351,6 +1357,14 @@ function latestCollectionRun() {
     message: row.message ? row.message.replace(/\n/g, ' ').replace(/\s+/g, ' ').slice(0, 300) : null,
     collectedAt: row.collectedAt || null
   };
+}
+
+function latestTokenEventAt() {
+  const row = one(`
+    SELECT MAX(timestamp) AS latestEventAt
+    FROM token_events
+  `);
+  return row?.latestEventAt || null;
 }
 
 function hasTrustedEventCollectionRun() {
@@ -1758,6 +1772,28 @@ function validateLocalJsonWrite(req, res, label) {
   return true;
 }
 
+function validateIngestJsonWrite(req, res) {
+  const expectedToken = String(process.env.INGEST_TOKEN || '').trim();
+  if (!expectedToken) {
+    sendJson(res, { error: 'Ingest disabled. Set INGEST_TOKEN to enable /api/ingest.' }, 403);
+    return false;
+  }
+  if (!isLocalOrigin(req.headers.origin)) {
+    sendJson(res, { error: 'ingest 仅允许来自本机页面或无 Origin 的机器请求' }, 403);
+    return false;
+  }
+  if (!isJsonRequest(req)) {
+    sendJson(res, { error: 'Content-Type must be application/json' }, 415);
+    return false;
+  }
+  const actualToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (actualToken !== expectedToken) {
+    sendJson(res, { error: 'Unauthorized' }, 401);
+    return false;
+  }
+  return true;
+}
+
 function validateLocalRead(req, res, label) {
   if (!isLoopback(req.socket.remoteAddress)) {
     sendJson(res, { error: `${label}仅允许本机访问` }, 403);
@@ -1812,7 +1848,9 @@ function contentType(filePath) {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
     '.js': 'application/javascript; charset=utf-8',
-    '.jsx': 'application/javascript; charset=utf-8'
+    '.jsx': 'application/javascript; charset=utf-8',
+    '.svg': 'image/svg+xml; charset=utf-8',
+    '.webmanifest': 'application/manifest+json; charset=utf-8'
   };
   return types[extname(filePath)] || 'application/octet-stream';
 }

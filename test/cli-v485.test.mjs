@@ -38,6 +38,9 @@ test('bare CLI auto apply writes trusted event usage before starting UI', async 
     assert.equal(data.meta.runtime.packageVersion, packageJson.version);
     assert.equal(data.meta.runtime.counts.tokenEventRows, 1);
     assert.equal(data.meta.dataMode.id, 'real-event-verified');
+    const live = await getJson(apiPort, '/api/live');
+    assert.equal(live.autoCollectEnabled, true);
+    assert.equal(live.refreshIntervalSeconds, 60);
   } finally {
     await stopChild(child);
     cleanupFixture(fixture);
@@ -70,6 +73,8 @@ test('bare CLI dry-run-only starts UI without writing usage', async () => {
     assert.equal(data.meta.runtime.counts.sessionRows, 0);
     assert.equal(data.meta.runtime.counts.tokenEventRows, 0);
     assert.equal(data.meta.dataMode.id, 'empty');
+    const live = await getJson(apiPort, '/api/live');
+    assert.equal(live.autoCollectEnabled, false);
   } finally {
     await stopChild(child);
     cleanupFixture(fixture);
@@ -102,6 +107,8 @@ test('bare CLI no-collect starts UI without scanning or writing usage', async ()
     assert.equal(data.meta.runtime.counts.sessionRows, 0);
     assert.equal(data.meta.runtime.counts.tokenEventRows, 0);
     assert.equal(data.meta.dataMode.id, 'empty');
+    const live = await getJson(apiPort, '/api/live');
+    assert.equal(live.autoCollectEnabled, false);
   } finally {
     await stopChild(child);
     cleanupFixture(fixture);
@@ -152,6 +159,12 @@ function createAutoFixture() {
       NODE_OPTIONS: '--no-warnings'
     }
   };
+}
+
+async function getJson(port, path) {
+  const response = await fetch(`http://127.0.0.1:${port}${path}`);
+  if (!response.ok) assert.fail(await response.text());
+  return response.json();
 }
 
 function cleanupFixture(fixture) {

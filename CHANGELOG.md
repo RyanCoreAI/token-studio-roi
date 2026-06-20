@@ -1,5 +1,56 @@
 # Changelog
 
+## 6.0.6
+
+- Unified browser `/live` and Electron Desktop Pulse on the same cyberpunk Pulse dashboard, while keeping Dashboard, Trust, and Review in the calmer review/audit style.
+- Clarified live metrics so `Token 事件数` and `Agent 活跃时长` are derived from local `token_events`, not fabricated request counts or process uptime.
+- Tightened the Pulse layout with responsive KPI cards, chart axis labels, and a rounded active-time ring so browser and desktop windows do not clip at common Windows scaling settings.
+
+## 6.0.5
+
+- Enabled safe live auto-refresh for the default real entry and Desktop Pulse: trusted Claude/Codex event-level metadata is refreshed into SQLite on a 60s loop by the local service.
+- Kept `start`, `--no-collect`, `--dry-run-only`, and `demo` read-only/demo semantics unchanged.
+- Added `/api/live` freshness metadata (`latestEventAt`, `latestCollectionRunAt`, `collectionState`, `dataFreshness`, `staleReason`) so a zero recent window is distinguishable from stale or failed collection.
+- Added a Live/Desktop Pulse "立即刷新" fallback that calls the existing local `/api/collect` route and reports clear errors instead of failing silently.
+- Added explicit PWA/mobile install metadata and Token Studio icons so mobile install prompts no longer inherit stale app names from another localhost app.
+
+## 6.0.4
+
+- Disabled `/api/ingest` by default unless `INGEST_TOKEN` is configured.
+- Required `Authorization: Bearer <token>` for every enabled ingest request and kept ingest JSON-only.
+- Rejected non-local browser origins for ingest while preserving no-Origin machine requests.
+- Documented that Desktop Pulse is currently a source-run companion and future desktop downloads should ship as separate GitHub Release assets.
+
+## 6.0.3
+
+- Stabilized the v6 release candidate without adding collectors, schema, or collection behavior.
+- Locked the Dashboard priority order so charts and Token KPI appear immediately after the time/source/device/model filters.
+- Hardened Electron Desktop Pulse around local-only navigation, denied new windows, denied renderer permission requests, sandboxed rendering, and web security.
+- Expanded release gates so publish workflows include browser smoke, desktop smoke, privacy checks, npm audit, tarball smoke, and least-privilege GitHub permissions.
+- Updated final review and public readiness docs to describe v6.0.3 as the stabilization RC and to keep npm publishing as a separate explicit action.
+
+## 6.0.2
+
+- Upgraded `/review` copy outputs into professional Markdown-ready packs for ROI evidence, technical blog drafts, and resume/interview project descriptions.
+- Moved review copy generation into pure functions with tests so UI buttons no longer depend on static surface-level strings.
+- Added safeguards so generated materials state trust boundaries, official-price limitations, missing evidence, and automatic-vs-manual provenance instead of inventing ROI gains.
+- Local-only UX/content patch: no schema, collector, API, or npm publish behavior changes.
+
+## 6.0.1
+
+- Changed `/review` top actions from silent copy/apply buttons into preview-first modals for evidence, blog material, and resume material, with explicit copy success/failure feedback.
+- Clarified that Desktop Pulse is an optional local companion for live guardrails and quick entry, while the browser Web App remains the full Dashboard / Trust / Review workspace.
+- Scoped the cyberpunk visual skin to Electron Desktop Pulse via `/live?surface=desktop`; browser `/live` now keeps the calmer Claude-like audit style.
+- Local-only UX patch: no schema, collector, or npm publish behavior changes.
+
+## 6.0.0
+
+- Added Coverage Catch-up metadata that separates native trusted collection, ccusage import, experimental audit, detected-only, and unsupported/no-token-field sources without inflating usage coverage.
+- Extended custom budget profiles with `modelGroup` and `hardThreshold` so `/live`, statusline, and Desktop Pulse can distinguish source-level and heavy/light-model guardrails.
+- Added a cyberpunk Pulse skin for the Electron desktop live surface while keeping the browser `/live`, Dashboard, Trust, and Review in the audit UI.
+- Added an optional Electron Desktop Pulse companion that reuses the local Web/API service, opens `/live`, and provides tray links to Dashboard, Review, and Trust without auto-collecting or uploading data.
+- Added `npm run desktop`, `npm run desktop:smoke`, `docs/desktop-pulse.md`, and a manual `desktop-build.yml` smoke workflow with least-privilege `contents: read`.
+
 ## 5.9.1
 
 - Prepared the final public release candidate without adding product features.

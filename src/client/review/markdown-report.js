@@ -76,6 +76,7 @@ export function buildMarkdownReviewReport({
         [
           ['原生可信采集', formatInt(coverageBridge.summary?.nativeTrusted || 0)],
           ['ccusage 可导入', formatInt(coverageBridge.summary?.importable || 0)],
+          ['实验采集', formatInt(coverageBridge.summary?.experimental || 0)],
           ['仅检测到', formatInt(coverageBridge.summary?.detectedOnly || 0)],
           ['不支持 / 无 token 字段', formatInt(coverageBridge.summary?.unsupported || 0)]
         ]
