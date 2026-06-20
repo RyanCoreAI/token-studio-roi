@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { resolveLaunchCwd, resolveViteBin } from '../src/runtime-paths.mjs';
 
@@ -59,7 +59,7 @@ test('resolveLaunchCwd expands Windows 8.3 temp paths before starting Vite', () 
 
   const resolved = resolveLaunchCwd(shortPackageRoot, {
     realpathLike(path) {
-      assert.equal(path, shortPackageRoot);
+      assert.equal(path, resolve(shortPackageRoot));
       return longPackageRoot;
     }
   });
