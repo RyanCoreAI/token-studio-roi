@@ -30,6 +30,7 @@ test('bare CLI auto apply writes trusted event usage before starting UI', async 
     cwd: process.cwd(),
     env: { ...process.env, ...fixture.env },
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
     windowsHide: true
   });
 
@@ -65,6 +66,7 @@ test('bare CLI dry-run-only starts UI without writing usage', async () => {
     cwd: process.cwd(),
     env: { ...process.env, ...fixture.env },
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
     windowsHide: true
   });
 
@@ -99,6 +101,7 @@ test('bare CLI no-collect starts UI without scanning or writing usage', async ()
     cwd: process.cwd(),
     env: { ...process.env, ...fixture.env },
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
     windowsHide: true
   });
 
@@ -205,6 +208,14 @@ function stopChild(child) {
       if (process.platform === 'win32' && child.pid) {
         spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' });
         return;
+      }
+      if (child.pid) {
+        try {
+          process.kill(-child.pid, force ? 'SIGKILL' : 'SIGTERM');
+          return;
+        } catch {
+          // Fall back to killing the direct child below.
+        }
       }
       child.kill(force ? 'SIGKILL' : 'SIGTERM');
     };

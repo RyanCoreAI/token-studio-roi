@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -9,7 +10,7 @@ import { openDb, recordRun, upsertSession, upsertTokenEvent } from '../src/db.mj
 test('source health API returns safe coverage metadata', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'token-studio-source-health-api-'));
   const dbPath = join(dir, 'usage.sqlite');
-  const port = 6400 + Math.floor(Math.random() * 1000);
+  const port = await freePort(6400);
   seedDb(dbPath);
 
   const child = spawn(process.execPath, ['src/server.mjs'], {
@@ -68,7 +69,7 @@ test('source health API returns safe coverage metadata', async () => {
 test('data API labels real aggregate-only databases as not event verified', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'token-studio-data-mode-aggregate-'));
   const dbPath = join(dir, 'usage.sqlite');
-  const port = 7400 + Math.floor(Math.random() * 1000);
+  const port = await freePort(7400);
   seedAggregateDb(dbPath);
 
   const child = spawn(process.execPath, ['src/server.mjs'], {
@@ -101,7 +102,7 @@ test('data API labels real aggregate-only databases as not event verified', asyn
 test('data API labels event rows without a verified run as needing coverage', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'token-studio-data-mode-event-'));
   const dbPath = join(dir, 'usage.sqlite');
-  const port = 8400 + Math.floor(Math.random() * 1000);
+  const port = await freePort(8400);
   seedEventDb(dbPath, { verifiedRun: false });
 
   const child = spawn(process.execPath, ['src/server.mjs'], {
@@ -133,7 +134,7 @@ test('data API labels event rows without a verified run as needing coverage', as
 test('data API labels verified event-level databases as event verified', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'token-studio-data-mode-event-verified-'));
   const dbPath = join(dir, 'usage.sqlite');
-  const port = 8500 + Math.floor(Math.random() * 1000);
+  const port = await freePort(8500);
   seedEventDb(dbPath, { verifiedRun: true });
 
   const child = spawn(process.execPath, ['src/server.mjs'], {
@@ -246,5 +247,21 @@ function stopChild(child) {
   return new Promise(resolve => {
     child.once('close', resolve);
     child.kill();
+  });
+}
+
+async function freePort(start) {
+  for (let port = start; port < start + 1000; port += 1) {
+    if (await canListen(port)) return port;
+  }
+  throw new Error(`No free port found near ${start}`);
+}
+
+function canListen(port) {
+  return new Promise(resolvePort => {
+    const server = createServer();
+    server.once('error', () => resolvePort(false));
+    server.once('listening', () => server.close(() => resolvePort(true)));
+    server.listen(port, '127.0.0.1');
   });
 }
