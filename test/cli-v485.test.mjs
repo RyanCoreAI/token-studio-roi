@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -192,9 +192,28 @@ async function waitForData(port) {
 function stopChild(child) {
   if (child.exitCode != null) return Promise.resolve();
   return new Promise(resolve => {
-    child.once('close', resolve);
-    child.kill();
-    setTimeout(resolve, 3000).unref();
+    let resolved = false;
+    const done = () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(killTimer);
+      clearTimeout(resolveTimer);
+      resolve();
+    };
+    const killTree = force => {
+      if (child.exitCode != null) return done();
+      if (process.platform === 'win32' && child.pid) {
+        spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' });
+        return;
+      }
+      child.kill(force ? 'SIGKILL' : 'SIGTERM');
+    };
+    const killTimer = setTimeout(() => killTree(true), 2500);
+    const resolveTimer = setTimeout(done, 5000);
+    killTimer.unref?.();
+    resolveTimer.unref?.();
+    child.once('close', done);
+    killTree(false);
   });
 }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.0.7
+
+- Fixed `/api/live` 24-hour Pulse metrics so token event counts are computed from the requested window instead of a fixed 500-row sample.
+- Hardened CLI integration tests to terminate spawned local service processes reliably in GitHub Actions.
+- Updated the final live Pulse screenshot and release checklist for the 6.0.7 publication candidate.
+
 ## 6.0.6
 
 - Unified browser `/live` and Electron Desktop Pulse on the same cyberpunk Pulse dashboard, while keeping Dashboard, Trust, and Review in the calmer review/audit style.

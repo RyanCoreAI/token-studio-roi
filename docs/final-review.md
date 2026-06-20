@@ -40,7 +40,7 @@ Token Studio ROI is considered feature-complete for the v6.0 stabilization line.
   - `docs/assets/token-studio-v591-real-trust.png`
   - `docs/assets/token-studio-v591-real-review.png`
   - `docs/assets/token-studio-v591-real-live.png`
-  - `docs/assets/token-studio-v606-live-pulse.png`
+  - `docs/assets/token-studio-v607-live-pulse.png`
 
 ## Stop Rules
 
@@ -61,4 +61,6 @@ Explicit non-goals after v5.9:
 
 ## Release Position
 
-v6.0.6 is the stabilization release candidate. npm publishing, GitHub release notes, or public promotion should only happen after the local gate, GitHub release gate, tarball smoke, browser smoke, desktop smoke, real screenshot inspection, and npm post-publish smoke pass.
+v6.0.7 is the stabilization release candidate. npm publishing, GitHub release notes, or public promotion should only happen after the local gate, GitHub release gate, tarball smoke, browser smoke, desktop smoke, real screenshot inspection, and npm post-publish smoke pass.
+
+The v6.0.7 candidate also fixes the live Pulse event-count regression: `/api/live` now computes 24-hour token events from the requested window instead of a fixed 500-row sample.

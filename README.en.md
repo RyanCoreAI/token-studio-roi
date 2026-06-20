@@ -29,7 +29,7 @@ By default it does not read, display, or upload conversation content; it only re
 
 See [docs/competitive-notes.md](docs/competitive-notes.md) for the fuller competitor reference and differentiation notes.
 
-v5.9 is the Web/CLI ROI review baseline. v6 adds only two explicit improvements: Coverage Catch-up and the optional Desktop Pulse companion; `v6.0.6` is the live/Pulse stabilization build and does not continue feature expansion. It still avoids leaderboards, cloud sync, accounts, multi-user features, and fake collector coverage. See [docs/final-review.md](docs/final-review.md).
+v5.9 is the Web/CLI ROI review baseline. v6 adds only two explicit improvements: Coverage Catch-up and the optional Desktop Pulse companion; `v6.0.7` is the live/Pulse stabilization build and does not continue feature expansion. It still avoids leaderboards, cloud sync, accounts, multi-user features, and fake collector coverage. See [docs/final-review.md](docs/final-review.md).
 
 ## What Makes ROI Different?
 
@@ -133,7 +133,7 @@ These screenshots are from demo mode or sanitized synthetic data, not real local
 
 ![Token Studio ROI review](docs/assets/token-studio-v59-review.png)
 
-![Token Studio ROI live pulse](docs/assets/token-studio-v606-live-pulse.png)
+![Token Studio ROI live pulse](docs/assets/token-studio-v607-live-pulse.png)
 
 Real local validation screenshots are for pre-release verification, not the default public hero assets. They may contain model names, project aliases, and aggregate token counts, but must not contain prompts, responses, transcripts, diffs, full local paths, or private exported reports.
 
@@ -270,7 +270,7 @@ Default URLs:
 - [ ] `npm audit --audit-level=low`
 - [ ] `npm view token-studio version` is lower than this package version before publishing
 - [ ] `npm pack --dry-run`
-- [ ] `npm run smoke:published -- --version 6.0.6` after npm publish
+- [ ] `npm run smoke:published -- --version 6.0.7` after npm publish
 - [ ] demo screenshots come from demo mode
 - [ ] real validation screenshots are inspected and contain no transcript, diff, prompt, full path, or private export
 - [ ] `/live` loads from demo mode or temporary SQLite

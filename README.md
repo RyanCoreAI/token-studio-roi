@@ -29,7 +29,7 @@ npx token-studio
 
 更完整的竞品参考和差异化记录见 [docs/competitive-notes.md](docs/competitive-notes.md)。
 
-v5.9 是 Web/CLI ROI 复盘基线。v6 只做两个明确补强：Coverage Catch-up 和可选 Desktop Pulse；`v6.0.6` 是 live/Pulse 稳定化版本，不再继续扩功能。项目仍不追 leaderboard、云同步、账号、多用户或伪造 collector。终局验收见 [docs/final-review.md](docs/final-review.md)。
+v5.9 是 Web/CLI ROI 复盘基线。v6 只做两个明确补强：Coverage Catch-up 和可选 Desktop Pulse；`v6.0.7` 是 live/Pulse 稳定化版本，不再继续扩功能。项目仍不追 leaderboard、云同步、账号、多用户或伪造 collector。终局验收见 [docs/final-review.md](docs/final-review.md)。
 
 ## What Makes ROI Different?
 
@@ -133,7 +133,7 @@ npm run desktop
 
 ![Token Studio ROI review](docs/assets/token-studio-v59-review.png)
 
-![Token Studio ROI live pulse](docs/assets/token-studio-v606-live-pulse.png)
+![Token Studio ROI live pulse](docs/assets/token-studio-v607-live-pulse.png)
 
 真实本地验收截图只用于发布前核对，不作为默认公开首屏素材；截图允许包含模型名、项目别名和聚合 token 数，但不得包含 prompt、response、transcript、diff、完整本机路径或私有导出报告。
 
@@ -270,7 +270,7 @@ npm run dev
 - [ ] `npm audit --audit-level=low`
 - [ ] `npm view token-studio version` is lower than this package version before publishing
 - [ ] `npm pack --dry-run`
-- [ ] `npm run smoke:published -- --version 6.0.6` after npm publish
+- [ ] `npm run smoke:published -- --version 6.0.7` after npm publish
 - [ ] demo screenshots come from demo mode
 - [ ] real validation screenshots are inspected and contain no transcript, diff, prompt, full path, or private export
 - [ ] `/live` loads from demo mode or temporary SQLite

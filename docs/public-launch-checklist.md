@@ -30,7 +30,7 @@ Public README screenshots:
   - `docs/assets/token-studio-v59-dashboard.png`
   - `docs/assets/token-studio-v59-trust.png`
   - `docs/assets/token-studio-v59-review.png`
-  - `docs/assets/token-studio-v606-live-pulse.png`
+  - `docs/assets/token-studio-v607-live-pulse.png`
 
 Real local validation screenshots:
 
@@ -45,7 +45,7 @@ Real local validation screenshots:
 ## GitHub Release
 
 - Repository name: `token-studio-roi`.
-- Current public release candidate: `v6.0.6`.
+- Current public release candidate: `v6.0.7`.
 - Historical standalone baseline: `v4.0.0`.
 - Suggested topics: `ai-coding`, `token-usage`, `cost-tracking`, `local-first`, `privacy-first`, `roi`, `codex-cli`, `claude-code`.
 - Release notes should say cost is official public token-price conversion, not a provider invoice.
@@ -65,5 +65,5 @@ Real local validation screenshots:
 - Do not publish until `token-studio coverage` shows Claude/Codex event-level rows or explains why they are unavailable. Cursor detected-only must not be marketed as successful native usage collection.
 - If the package name is unavailable, publish the fallback only after updating README, package metadata, and release notes consistently.
 - `npm whoami` must succeed before running `npm publish --access public`.
-- After publish, run `npm run smoke:published -- --version 6.0.6` and verify npm latest resolves to `6.0.6`.
+- After publish, run `npm run smoke:published -- --version 6.0.7` and verify npm latest resolves to `6.0.7`.
 - If using GitHub Trusted Publishing, trigger `.github/workflows/publish-npm.yml` manually only after `release-gate` is green.
