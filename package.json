@@ -3,6 +3,14 @@
   "version": "6.0.8",
   "description": "Local AI coding ROI studio for private token, output, and model strategy review.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RyanCoreAI/token-studio-roi.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RyanCoreAI/token-studio-roi/issues"
+  },
+  "homepage": "https://github.com/RyanCoreAI/token-studio-roi#readme",
   "bin": {
     "token-studio": "src/cli.mjs"
   },
