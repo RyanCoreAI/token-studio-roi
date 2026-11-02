@@ -64,6 +64,7 @@ import { buildProjectCoverage, buildReviewWorkflow } from './project-coverage.mj
 import { buildCoverageBridge } from './coverage-bridge.mjs';
 import { buildEvidenceFlywheel } from './evidence-flywheel.mjs';
 import { buildLocalTrust, buildLocalTrustSamples } from './local-trust.mjs';
+import { priceSessionRows } from './session-pricing.mjs';
 import {
   applyEvidenceSuggestions,
   buildEvidenceAutopilotPlan
@@ -95,7 +96,19 @@ let collectionState = {
 };
 
 const server = createServer((req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  let url;
+  try {
+    // Validate the authority without using untrusted Host text as the parser
+    // base. A malformed request is a request error, not a process exception.
+    const authority = new URL(`http://${req.headers.host || ''}`);
+    if (!authority.hostname || authority.username || authority.password
+        || authority.pathname !== '/' || authority.search || authority.hash
+        || !req.url?.startsWith('/')) throw new Error('Invalid request target');
+    url = new URL(req.url, 'http://localhost');
+  } catch {
+    sendJson(res, { error: 'Invalid request URL or Host header' }, 400);
+    return;
+  }
   if (url.pathname.startsWith('/api/')) {
     handleApi(req, url, res).catch(error => {
       sendJson(res, { error: error.message }, 500);
@@ -289,11 +302,7 @@ async function handleApi(req, url, res) {
       ...d,
       projectPath: projMap.get(`${d.device}::${d.source}`)?.project || null
     }, d.model, providerFromSource(d.source)));
-    const pricedSessions = sessions.map(s => attachOfficialPricing(
-      s,
-      s.model,
-      providerFromSource(s.source)
-    ));
+    const pricedSessions = priceSessionRows(db, sessions);
 
     const workItems = listWorkItems(db);
     const budgetProfiles = listBudgetProfiles(db);
@@ -1136,7 +1145,7 @@ function all(sql) {
 }
 
 function liveSessions() {
-  return all(`
+  return priceSessionRows(db, all(`
     SELECT device, source, session_id AS sessionId, last_activity AS lastActivity,
       project_path AS projectPath,
       input_tokens AS inputTokens,
@@ -1154,7 +1163,7 @@ function liveSessions() {
     ...session,
     model: modelFromSessionId(session.sessionId),
     cacheReadTokens: Number(session.cacheReadTokens || 0) + Number(session.cachedInputTokens || 0)
-  }));
+  })));
 }
 
 function liveTokenEvents({ windowMinutes = 15, budgetProfiles = [] } = {}) {
@@ -1618,7 +1627,7 @@ function buildAutoAttributionContext() {
     const projectPath = normalizeProjectPath(s.projectPath, s.sessionId);
     const ruleProjectAlias = matchProjectAliasRule(projectPath, enabledAliasRules);
     const model = modelFromSessionId(s.sessionId);
-    return attachOfficialPricing({
+    return {
       ...s,
       ...DEFAULT_SESSION_ANNOTATION,
       model,
@@ -1645,9 +1654,9 @@ function buildAutoAttributionContext() {
       outputLabel: s.outputLabel || null,
       outputType: s.outputType || DEFAULT_SESSION_ANNOTATION.outputType,
       outputUpdatedAt: s.outputUpdatedAt || null
-    }, model, providerFromSource(s.source));
+    };
   });
-  return { sessions, projectAliasRules: aliasRules };
+  return { sessions: priceSessionRows(db, sessions), projectAliasRules: aliasRules };
 }
 
 function normalizeProjectPath(projectPath, sessionId) {
@@ -1694,6 +1703,7 @@ function providerFromSource(source) {
 function modelFromSessionId(sessionId) {
   const text = String(sessionId || '').trim();
   if (!text) return null;
+  if (/^local:(codex|claude):v2:/.test(text)) return null;
   if (text.startsWith('local:')) return text.split(':').at(-1) || null;
   return null;
 }

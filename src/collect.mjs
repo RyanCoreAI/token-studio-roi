@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { createSqliteBackup, openDb, recordRun, upsertDaily, upsertSession, upsertTokenEvent } from './db.mjs';
 import { loadPricing } from './pricing.mjs';
 import { collectableCollectors, collectorLabel, enabledCollectorIds } from './collector-registry.mjs';
+import { reconcileCollectorIdentities } from './collector-identity.mjs';
 
 try {
   await main();
@@ -188,6 +189,11 @@ async function collectLocal({ collectors, mode, db, dbPath, pricingData, device,
   }
 
   if (mode === 'apply' && db) {
+    for (const payload of payloads) {
+      if (payload.type === 'data' && ['codex', 'claude'].includes(payload.sourceSummary.id)) {
+        reconcileCollectorIdentities(db, payload.sessionRows, payload.eventRows, payload.sourceSummary.id === 'codex' ? 'Codex' : 'Claude');
+      }
+    }
     summary.backup = createSqliteBackup(db, dbPath, { reason: 'collect' });
   }
 
@@ -326,6 +332,8 @@ function normalizeSessionRows(json, deviceName, collectedAt) {
       device: deviceName,
       source,
       sessionId: entry.sessionId || ['local', entry.client || 'unknown', workspace || 'no-workspace', model].join(':'),
+      legacySessionPrefix: entry.legacySessionPrefix,
+      legacyIdentityLossy: Boolean(entry.legacyIdentityLossy),
       lastActivity: entry.lastActivity || collectedAt,
       projectPath: workspace || null,
       inputTokens: tokens.input,
