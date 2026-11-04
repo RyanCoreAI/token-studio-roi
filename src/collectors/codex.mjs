@@ -116,10 +116,12 @@ function summaryToTokens(s) {
   const clamped = Math.min(s.cached, s.input);
   return {
     input:     Math.max(0, s.input - clamped),
-    output:    s.output,
+    // Canonical collector buckets are mutually exclusive. Codex output_tokens
+    // includes reasoning_output_tokens (a subset), not an additional charge.
+    output:    Math.max(0, s.output - Math.min(s.reasoning, s.output)),
     cacheRead:  clamped,
     cacheWrite: 0,
-    reasoning:  s.reasoning
+    reasoning:  Math.min(s.reasoning, s.output)
   };
 }
 
@@ -322,8 +324,9 @@ export async function collect(pricingData = null) {
     const events = await parseSessionFile(filePath, fileSessionId);
     if (!events.length) continue;
     const rawSessionId = events.find(event => event.sessionId)?.sessionId || fileSessionId;
-    const primaryModel = primaryModelFor(events);
-    const sessionId = `local:${CLIENT_KEY}:${hashableSessionPart(rawSessionId)}:${primaryModel}`;
+    const sessionId = `local:${CLIENT_KEY}:v2:${stableHash(rawSessionId)}`;
+    const legacySessionPrefix = `local:${CLIENT_KEY}:${hashableSessionPart(rawSessionId)}:`;
+    const occurrences = new Map();
 
     for (let index = 0; index < events.length; index += 1) {
       const { timestamp, date, model, workspace, tokens } = events[index];
@@ -342,6 +345,8 @@ export async function collect(pricingData = null) {
       if (!sessionMap.has(sessionId)) {
         sessionMap.set(sessionId, {
           sessionId,
+          legacySessionPrefix,
+          legacyIdentityLossy: hashableSessionPart(rawSessionId) !== rawSessionId,
           workspace: workspaceKey,
           workspaceLabel: decodeWorkspace(workspaceKey),
           model,
@@ -356,7 +361,10 @@ export async function collect(pricingData = null) {
       if (timestamp && (!sessionAgg.lastActivity || timestamp > sessionAgg.lastActivity)) {
         sessionAgg.lastActivity = timestamp;
       }
-      tokenEvents.push(tokenEventFor({ sessionId, timestamp, model, tokens, index }));
+      const occurrenceKey = `${timestamp}::${model}`;
+      const occurrence = occurrences.get(occurrenceKey) || 0;
+      occurrences.set(occurrenceKey, occurrence + 1);
+      tokenEvents.push(tokenEventFor({ sessionId, timestamp, model, tokens, index, occurrence }));
     }
   }
 
@@ -461,6 +469,8 @@ function buildOutput(dailyMap, sessionMap, tokenEvents, pricingData) {
       workspaceKey:   wm.workspace,
       workspaceLabel: wm.workspaceLabel,
       sessionId:       wm.sessionId,
+      legacySessionPrefix: wm.legacySessionPrefix,
+      legacyIdentityLossy: wm.legacyIdentityLossy,
       lastActivity:    wm.lastActivity,
       model:          wm.model,
       ...tokens,
@@ -487,9 +497,9 @@ function emptyAuditSummary() {
   };
 }
 
-function tokenEventFor({ sessionId, timestamp, model, tokens, index }) {
+function tokenEventFor({ sessionId, timestamp, model, tokens, index, occurrence }) {
   return {
-    eventId: `codex:${stableHash({ sessionId, timestamp, model, tokens, index })}`,
+    eventId: `codex:v2:${stableHash({ sessionId, timestamp, model, occurrence: timestamp ? occurrence : index })}`,
     source: CLIENT_KEY,
     sessionId,
     timestamp: timestamp || new Date().toISOString(),
@@ -501,14 +511,6 @@ function tokenEventFor({ sessionId, timestamp, model, tokens, index }) {
     reasoningTokens: tokens.reasoning,
     privacyLevel: 'safe'
   };
-}
-
-function primaryModelFor(events) {
-  const byModel = new Map();
-  for (const event of events) {
-    byModel.set(event.model, (byModel.get(event.model) || 0) + tokenTotal(event.tokens));
-  }
-  return [...byModel.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
 }
 
 function tokenTotal(tokens) {

@@ -1,4 +1,5 @@
-import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { BlockList, isIP } from 'node:net';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { basename, dirname, extname, join, resolve } from 'node:path';
@@ -64,11 +65,15 @@ import { buildProjectCoverage, buildReviewWorkflow } from './project-coverage.mj
 import { buildCoverageBridge } from './coverage-bridge.mjs';
 import { buildEvidenceFlywheel } from './evidence-flywheel.mjs';
 import { buildLocalTrust, buildLocalTrustSamples } from './local-trust.mjs';
+import { priceSessionRows } from './session-pricing.mjs';
 import {
   applyEvidenceSuggestions,
   buildEvidenceAutopilotPlan
 } from './evidence-autopilot.mjs';
 
+const loopbackAddresses = new BlockList();
+loopbackAddresses.addSubnet('127.0.0.0', 8, 'ipv4');
+loopbackAddresses.addAddress('::1', 'ipv6');
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || process.env.BIND_HOST || '127.0.0.1';
 validateHostConfiguration(host, {
@@ -95,7 +100,19 @@ let collectionState = {
 };
 
 const server = createServer((req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  let url;
+  try {
+    // Validate the authority without using untrusted Host text as the parser
+    // base. A malformed request is a request error, not a process exception.
+    const authority = new URL(`http://${req.headers.host || ''}`);
+    if (!authority.hostname || authority.username || authority.password
+        || authority.pathname !== '/' || authority.search || authority.hash
+        || !req.url?.startsWith('/')) throw new Error('Invalid request target');
+    url = new URL(req.url, 'http://localhost');
+  } catch {
+    sendJson(res, { error: 'Invalid request URL or Host header' }, 400);
+    return;
+  }
   if (url.pathname.startsWith('/api/')) {
     handleApi(req, url, res).catch(error => {
       sendJson(res, { error: error.message }, 500);
@@ -289,11 +306,7 @@ async function handleApi(req, url, res) {
       ...d,
       projectPath: projMap.get(`${d.device}::${d.source}`)?.project || null
     }, d.model, providerFromSource(d.source)));
-    const pricedSessions = sessions.map(s => attachOfficialPricing(
-      s,
-      s.model,
-      providerFromSource(s.source)
-    ));
+    const pricedSessions = priceSessionRows(db, sessions);
 
     const workItems = listWorkItems(db);
     const budgetProfiles = listBudgetProfiles(db);
@@ -1118,13 +1131,23 @@ function serveStatic(pathname, res) {
     : pathname === '/review' ? join(staticDir, 'index.html')
       : pathname === '/live' ? join(staticDir, 'index.html')
     : join(staticDir, pathname);
-  if (!filePath.startsWith(staticDir) || !existsSync(filePath)) {
+  let isFile = false;
+  try { isFile = statSync(filePath).isFile(); } catch { /* Missing or inaccessible file. */ }
+  if (!filePath.startsWith(staticDir) || !isFile) {
     res.writeHead(404);
     res.end('Not found');
     return;
   }
-  res.writeHead(200, { 'content-type': contentType(filePath) });
-  createReadStream(filePath).pipe(res);
+  const stream = createReadStream(filePath);
+  stream.once('error', () => {
+    if (res.headersSent) res.destroy();
+    else { res.writeHead(404); res.end('Not found'); }
+  });
+  stream.once('open', () => {
+    res.writeHead(200, { 'content-type': contentType(filePath) });
+    stream.pipe(res);
+  });
+  res.once('close', () => stream.destroy());
 }
 
 function one(sql) {
@@ -1136,7 +1159,7 @@ function all(sql) {
 }
 
 function liveSessions() {
-  return all(`
+  return priceSessionRows(db, all(`
     SELECT device, source, session_id AS sessionId, last_activity AS lastActivity,
       project_path AS projectPath,
       input_tokens AS inputTokens,
@@ -1154,7 +1177,7 @@ function liveSessions() {
     ...session,
     model: modelFromSessionId(session.sessionId),
     cacheReadTokens: Number(session.cacheReadTokens || 0) + Number(session.cachedInputTokens || 0)
-  }));
+  })));
 }
 
 function liveTokenEvents({ windowMinutes = 15, budgetProfiles = [] } = {}) {
@@ -1618,7 +1641,7 @@ function buildAutoAttributionContext() {
     const projectPath = normalizeProjectPath(s.projectPath, s.sessionId);
     const ruleProjectAlias = matchProjectAliasRule(projectPath, enabledAliasRules);
     const model = modelFromSessionId(s.sessionId);
-    return attachOfficialPricing({
+    return {
       ...s,
       ...DEFAULT_SESSION_ANNOTATION,
       model,
@@ -1645,9 +1668,9 @@ function buildAutoAttributionContext() {
       outputLabel: s.outputLabel || null,
       outputType: s.outputType || DEFAULT_SESSION_ANNOTATION.outputType,
       outputUpdatedAt: s.outputUpdatedAt || null
-    }, model, providerFromSource(s.source));
+    };
   });
-  return { sessions, projectAliasRules: aliasRules };
+  return { sessions: priceSessionRows(db, sessions), projectAliasRules: aliasRules };
 }
 
 function normalizeProjectPath(projectPath, sessionId) {
@@ -1694,6 +1717,7 @@ function providerFromSource(source) {
 function modelFromSessionId(sessionId) {
   const text = String(sessionId || '').trim();
   if (!text) return null;
+  if (/^local:(codex|claude):v2:/.test(text)) return null;
   if (text.startsWith('local:')) return text.split(':').at(-1) || null;
   return null;
 }
@@ -1757,10 +1781,9 @@ function envFlag(name) {
 
 function isLoopback(address = '') {
   const value = String(address || '').toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
-  return value.startsWith('127.')
-    || value === '::1'
-    || value.startsWith('::ffff:127.')
-    || value === 'localhost';
+  if (value === 'localhost') return true;
+  const family = isIP(value);
+  return family !== 0 && loopbackAddresses.check(value, family === 4 ? 'ipv4' : 'ipv6');
 }
 
 function validateLocalJsonWrite(req, res, label) {
@@ -1799,6 +1822,12 @@ function validateLocalRead(req, res, label) {
     sendJson(res, { error: `${label}仅允许本机访问` }, 403);
     return false;
   }
+  // A browser's same-origin GET can omit Origin after DNS rebinding. The Host
+  // authority must independently identify a loopback endpoint.
+  if (!isLoopback(new URL(`http://${req.headers.host}`).hostname)) {
+    sendJson(res, { error: `${label}仅允许本机 Host` }, 403);
+    return false;
+  }
   if (!isLocalOrigin(req.headers.origin)) {
     sendJson(res, { error: `${label}仅允许来自本机页面` }, 403);
     return false;
@@ -1809,8 +1838,8 @@ function validateLocalRead(req, res, label) {
 function isLocalOrigin(origin) {
   if (!origin) return true;
   try {
-    const { hostname } = new URL(origin);
-    return isLoopback(hostname);
+    const { protocol, hostname, username, password } = new URL(origin);
+    return ['http:', 'https:'].includes(protocol) && !username && !password && isLoopback(hostname);
   } catch {
     return false;
   }

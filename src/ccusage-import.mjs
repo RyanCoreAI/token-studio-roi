@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import { calculateOfficialCost } from './pricing.mjs';
 import { recordRun, upsertDaily, upsertSession, upsertTokenEvent } from './db.mjs';
+import { prepareImportHistory, rebuildImportAggregates } from './ccusage-import-history.mjs';
 
 const UNSAFE_KEYS = new Set([
   'prompt',
@@ -15,6 +17,10 @@ const UNSAFE_KEYS = new Set([
   'content',
   'text'
 ]);
+const TOKEN_FIELDS = new Set(['inputTokens', 'input_tokens', 'input', 'outputTokens', 'output_tokens', 'output',
+  'cacheCreationTokens', 'cacheCreationInputTokens', 'cache_creation_tokens', 'cacheWriteTokens',
+  'cacheReadTokens', 'cacheReadInputTokens', 'cache_read_tokens', 'cachedInputTokens',
+  'reasoningTokens', 'reasoningOutputTokens', 'reasoning_output_tokens', 'totalTokens', 'total_tokens', 'costUSD', 'totalCost']);
 
 export function readCcusageImportInput(file) {
   if (!file || file === '-') {
@@ -38,7 +44,7 @@ export function parseCcusageJsonText(text) {
 }
 
 export function planCcusageImport(payload, options = {}) {
-  const device = cleanText(options.device, 120) || hostname();
+  const device = identityText(options.device, 'device', 120) || hostname();
   const now = options.now || new Date();
   const importSource = cleanText(options.importSource, 80) || 'import:ccusage-json';
   const command = cleanText(options.command, 240) || 'import-usage --format=ccusage-json';
@@ -60,8 +66,8 @@ export function planCcusageImport(payload, options = {}) {
       const source = sourceFromRow(part);
       const usageDate = usageDateFromRow(part);
       const timestamp = timestampFromRow(part, usageDate, now);
-      const model = cleanText(part.model, 160) || '<unknown>';
-      const projectPath = cleanText(part.projectPath || part.project || part.projectName, 240) || null;
+      const model = identityText(part.model, 'model', 120) || '<unknown>';
+      const projectPath = identityText(part.projectPath || part.project || part.projectName, 'projectPath', 4096) || null;
       const sessionId = sessionIdFromRow(part, detectedShape, usageDate, model, projectPath);
       const tokens = tokenFields(part);
       const cost = calculateOfficialCost(model, {
@@ -102,11 +108,18 @@ export function planCcusageImport(payload, options = {}) {
         totalTokens: tokens.totalTokens,
         costUSD: cost.totalUSD
       };
+      const rawSessionId = part.session || part.sessionId || part.session_id || part.id;
+      if (!rawSessionId) {
+        sessionRow.legacySessionId = `ccusage:${detectedShape}:${projectPath ? hashable(projectPath) : 'all'}:${usageDate}:${hashable(model)}`;
+      } else if (String(rawSessionId).trim().length > 240) {
+        sessionRow.legacySessionId = cleanText(rawSessionId, 240);
+      }
       const sessionKey = [sessionRow.device, sessionRow.source, sessionRow.sessionId].join('::');
       mergeSessionRow(sessionsByKey, sessionKey, sessionRow);
 
       const eventRow = {
-        eventId: eventIdFor({ detectedShape, source, usageDate, sessionId, model, timestamp }),
+        eventId: eventIdFor({ detectedShape, device, source, usageDate, sessionId, model, timestamp, part }),
+        importShape: detectedShape,
         device,
         source,
         sessionId,
@@ -120,7 +133,12 @@ export function planCcusageImport(payload, options = {}) {
         toolCategory,
         privacyLevel: 'safe'
       };
-      eventsByKey.set(eventRow.eventId, eventRow);
+      const previous = eventsByKey.get(eventRow.eventId);
+      if (!previous) eventsByKey.set(eventRow.eventId, eventRow);
+      else {
+        for (const key of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheCreationTokens', 'reasoningTokens']) previous[key] += eventRow[key];
+        if (eventRow.timestamp > previous.timestamp) previous.timestamp = eventRow.timestamp;
+      }
     }
   }
 
@@ -145,9 +163,11 @@ export function planCcusageImport(payload, options = {}) {
 export function applyCcusageImport(db, plan) {
   db.exec('BEGIN');
   try {
-    for (const row of plan.daily) upsertDaily(db, row);
-    for (const row of plan.sessions) upsertSession(db, row);
-    for (const row of plan.tokenEvents) upsertTokenEvent(db, row);
+    // Resolve old identities before the first write. Ambiguous historical data
+    // requires review instead of an implicit migration or duplicate insertion.
+    const history = prepareImportHistory(db, plan);
+    for (const row of history.events) upsertTokenEvent(db, row);
+    rebuildImportAggregates(db, plan, history, { upsertDaily, upsertSession });
     recordRun(db, plan.run);
     db.exec('COMMIT');
   } catch (error) {
@@ -190,12 +210,15 @@ function expandModelBreakdowns(row) {
   if (!breakdown) {
     return [{ ...row, model: primaryModel(row) }];
   }
+  // Parent token fields describe the complete row. A model breakdown must not
+  // inherit those totals or absent buckets from its parent aggregate.
+  const context = Object.fromEntries(Object.entries(row).filter(([key]) => !TOKEN_FIELDS.has(key)));
 
   if (Array.isArray(breakdown)) {
     const usable = breakdown.filter(item => item && typeof item === 'object' && hasTokenField(item));
     if (!usable.length) return [{ ...row, model: primaryModel(row) }];
     return usable.map((item, index) => ({
-      ...row,
+      ...context,
       ...item,
       model: item.model || item.modelName || primaryModel(row, index)
     }));
@@ -206,7 +229,7 @@ function expandModelBreakdowns(row) {
       .filter(([, item]) => item && typeof item === 'object' && hasTokenField(item));
     if (!usable.length) return [{ ...row, model: primaryModel(row) }];
     return usable.map(([model, item]) => ({
-      ...row,
+      ...context,
       ...item,
       model
     }));
@@ -239,6 +262,7 @@ function tokenFields(row) {
   const reasoningOutputTokens = integer(row.reasoningTokens ?? row.reasoningOutputTokens ?? row.reasoning_output_tokens);
   const explicitTotal = integer(row.totalTokens ?? row.total_tokens);
   const computedTotal = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens + reasoningOutputTokens;
+  if (explicitTotal && explicitTotal !== computedTotal) throw new Error('ccusage totalTokens does not match its token breakdown; review the source report before importing.');
   return {
     inputTokens,
     outputTokens,
@@ -267,7 +291,7 @@ function hasTokenField(row) {
 }
 
 function sourceFromRow(row) {
-  return cleanText(row.source || row.tool || row.instance || row.provider, 80) || 'ccusage';
+  return identityText(row.source || row.tool || row.instance || row.provider, 'source', 80) || 'ccusage';
 }
 
 function usageDateFromRow(row) {
@@ -285,21 +309,26 @@ function timestampFromRow(row, usageDate, now) {
 
 function sessionIdFromRow(row, shape, usageDate, model, projectPath) {
   const raw = row.session || row.sessionId || row.session_id || row.id || null;
-  if (raw) return cleanText(raw, 240);
-  const project = projectPath ? hashable(projectPath) : 'all';
-  return `ccusage:${shape}:${project}:${usageDate}:${hashable(model)}`;
+  if (raw) return String(raw).trim().length <= 240 ? String(raw).trim() : `ccusage:v2:session:${identityDigest(String(raw).trim())}`;
+  // Retain old identities only when the old slug was already lossless. This
+  // keeps ordinary daily reimports compatible without trusting colliding paths.
+  if ((!projectPath || hashable(projectPath) === projectPath) && hashable(model) === model) {
+    return `ccusage:${shape}:${projectPath || 'all'}:${usageDate}:${model}`;
+  }
+  return `ccusage:v2:${shape}:${identityDigest([projectPath, usageDate, model])}`;
 }
 
-function eventIdFor({ detectedShape, source, usageDate, sessionId, model, timestamp }) {
-  return [
-    'ccusage',
-    detectedShape,
-    hashable(source),
-    usageDate,
-    hashable(sessionId),
-    hashable(model),
-    timestamp
-  ].join(':');
+function eventIdFor({ detectedShape, device, source, usageDate, sessionId, model, timestamp, part }) {
+  // A session report is a cumulative snapshot. Its timestamp can advance when
+  // re-exported; that must update the existing snapshot rather than add it twice.
+  const period = detectedShape === 'session' ? null
+    : detectedShape === 'blocks' ? String(part.blockStart || part.firstActivity || part.id || timestamp)
+      : usageDate;
+  return `ccusage:v2:${detectedShape}:${identityDigest([detectedShape, device, source, sessionId, model, period])}`;
+}
+
+function identityDigest(value) {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 function mergeUsageRow(map, key, row) {
@@ -373,6 +402,12 @@ function cleanText(value, maxLength) {
   const text = String(value ?? '').trim();
   if (!text) return '';
   return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function identityText(value, field, maxLength) {
+  const text = String(value ?? '').trim();
+  if (text.length > maxLength) throw new Error(`ccusage ${field} exceeds ${maxLength} characters; identities cannot be truncated safely.`);
+  return text;
 }
 
 function integer(value) {
