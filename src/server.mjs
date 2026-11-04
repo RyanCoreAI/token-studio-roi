@@ -1,4 +1,5 @@
-import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { BlockList, isIP } from 'node:net';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { basename, dirname, extname, join, resolve } from 'node:path';
@@ -70,6 +71,9 @@ import {
   buildEvidenceAutopilotPlan
 } from './evidence-autopilot.mjs';
 
+const loopbackAddresses = new BlockList();
+loopbackAddresses.addSubnet('127.0.0.0', 8, 'ipv4');
+loopbackAddresses.addAddress('::1', 'ipv6');
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || process.env.BIND_HOST || '127.0.0.1';
 validateHostConfiguration(host, {
@@ -1127,13 +1131,23 @@ function serveStatic(pathname, res) {
     : pathname === '/review' ? join(staticDir, 'index.html')
       : pathname === '/live' ? join(staticDir, 'index.html')
     : join(staticDir, pathname);
-  if (!filePath.startsWith(staticDir) || !existsSync(filePath)) {
+  let isFile = false;
+  try { isFile = statSync(filePath).isFile(); } catch { /* Missing or inaccessible file. */ }
+  if (!filePath.startsWith(staticDir) || !isFile) {
     res.writeHead(404);
     res.end('Not found');
     return;
   }
-  res.writeHead(200, { 'content-type': contentType(filePath) });
-  createReadStream(filePath).pipe(res);
+  const stream = createReadStream(filePath);
+  stream.once('error', () => {
+    if (res.headersSent) res.destroy();
+    else { res.writeHead(404); res.end('Not found'); }
+  });
+  stream.once('open', () => {
+    res.writeHead(200, { 'content-type': contentType(filePath) });
+    stream.pipe(res);
+  });
+  res.once('close', () => stream.destroy());
 }
 
 function one(sql) {
@@ -1767,10 +1781,9 @@ function envFlag(name) {
 
 function isLoopback(address = '') {
   const value = String(address || '').toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
-  return value.startsWith('127.')
-    || value === '::1'
-    || value.startsWith('::ffff:127.')
-    || value === 'localhost';
+  if (value === 'localhost') return true;
+  const family = isIP(value);
+  return family !== 0 && loopbackAddresses.check(value, family === 4 ? 'ipv4' : 'ipv6');
 }
 
 function validateLocalJsonWrite(req, res, label) {
@@ -1809,6 +1822,12 @@ function validateLocalRead(req, res, label) {
     sendJson(res, { error: `${label}仅允许本机访问` }, 403);
     return false;
   }
+  // A browser's same-origin GET can omit Origin after DNS rebinding. The Host
+  // authority must independently identify a loopback endpoint.
+  if (!isLoopback(new URL(`http://${req.headers.host}`).hostname)) {
+    sendJson(res, { error: `${label}仅允许本机 Host` }, 403);
+    return false;
+  }
   if (!isLocalOrigin(req.headers.origin)) {
     sendJson(res, { error: `${label}仅允许来自本机页面` }, 403);
     return false;
@@ -1819,8 +1838,8 @@ function validateLocalRead(req, res, label) {
 function isLocalOrigin(origin) {
   if (!origin) return true;
   try {
-    const { hostname } = new URL(origin);
-    return isLoopback(hostname);
+    const { protocol, hostname, username, password } = new URL(origin);
+    return ['http:', 'https:'].includes(protocol) && !username && !password && isLoopback(hostname);
   } catch {
     return false;
   }
