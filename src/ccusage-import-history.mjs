@@ -1,4 +1,5 @@
 import { calculateOfficialCost } from './pricing.mjs';
+import { addTokenCounts } from './ccusage-validation.mjs';
 
 const eventColumns = `event_id AS eventId, device, source, session_id AS sessionId, timestamp, model`;
 const identity = row => JSON.stringify([row.device, row.source, row.sessionId]);
@@ -66,7 +67,8 @@ function sumEvents(events) {
   const total = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, costUSD: 0 };
   for (const event of events) {
     for (const key of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheCreationTokens', 'reasoningOutputTokens']) {
-      total[key] += event[key]; total.totalTokens += event[key];
+      total[key] = addTokenCounts(total[key], event[key]);
+      total.totalTokens = addTokenCounts(total.totalTokens, event[key]);
     }
     total.costUSD += calculateOfficialCost(event.model, { input: event.inputTokens, output: event.outputTokens,
       cacheRead: event.cacheReadTokens, cacheWrite: event.cacheCreationTokens, reasoning: event.reasoningOutputTokens }).totalUSD;

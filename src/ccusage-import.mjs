@@ -4,6 +4,7 @@ import { hostname } from 'node:os';
 import { calculateOfficialCost } from './pricing.mjs';
 import { recordRun, upsertDaily, upsertSession, upsertTokenEvent } from './db.mjs';
 import { prepareImportHistory, rebuildImportAggregates } from './ccusage-import-history.mjs';
+import { tokenCount, addTokenCounts } from './ccusage-validation.mjs';
 
 const UNSAFE_KEYS = new Set([
   'prompt',
@@ -95,7 +96,7 @@ export function planCcusageImport(payload, options = {}) {
         totalTokens: tokens.totalTokens,
         costUSD: cost.totalUSD
       };
-      const dailyKey = [usageRow.device, usageRow.source, usageRow.usageDate, usageRow.model].join('::');
+      const dailyKey = JSON.stringify([usageRow.device, usageRow.source, usageRow.usageDate, usageRow.model]);
       mergeUsageRow(dailyByKey, dailyKey, usageRow);
 
       const sessionRow = {
@@ -114,7 +115,7 @@ export function planCcusageImport(payload, options = {}) {
       } else if (String(rawSessionId).trim().length > 240) {
         sessionRow.legacySessionId = cleanText(rawSessionId, 240);
       }
-      const sessionKey = [sessionRow.device, sessionRow.source, sessionRow.sessionId].join('::');
+      const sessionKey = JSON.stringify([sessionRow.device, sessionRow.source, sessionRow.sessionId]);
       mergeSessionRow(sessionsByKey, sessionKey, sessionRow);
 
       const eventRow = {
@@ -136,7 +137,7 @@ export function planCcusageImport(payload, options = {}) {
       const previous = eventsByKey.get(eventRow.eventId);
       if (!previous) eventsByKey.set(eventRow.eventId, eventRow);
       else {
-        for (const key of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheCreationTokens', 'reasoningTokens']) previous[key] += eventRow[key];
+        for (const key of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheCreationTokens', 'reasoningTokens']) previous[key] = addTokenCounts(previous[key], eventRow[key]);
         if (eventRow.timestamp > previous.timestamp) previous.timestamp = eventRow.timestamp;
       }
     }
@@ -245,24 +246,25 @@ function primaryModel(row, index = 0) {
 }
 
 function tokenFields(row) {
-  const inputTokens = integer(row.inputTokens ?? row.input_tokens ?? row.input);
-  const outputTokens = integer(row.outputTokens ?? row.output_tokens ?? row.output);
-  const cacheCreationTokens = integer(
+  const inputTokens = tokenCount(row.inputTokens ?? row.input_tokens ?? row.input);
+  const outputTokens = tokenCount(row.outputTokens ?? row.output_tokens ?? row.output);
+  const cacheCreationTokens = tokenCount(
     row.cacheCreationTokens
     ?? row.cacheCreationInputTokens
     ?? row.cache_creation_tokens
     ?? row.cacheWriteTokens
   );
-  const cacheReadTokens = integer(
+  const cacheReadTokens = tokenCount(
     row.cacheReadTokens
     ?? row.cacheReadInputTokens
     ?? row.cache_read_tokens
     ?? row.cachedInputTokens
   );
-  const reasoningOutputTokens = integer(row.reasoningTokens ?? row.reasoningOutputTokens ?? row.reasoning_output_tokens);
-  const explicitTotal = integer(row.totalTokens ?? row.total_tokens);
-  const computedTotal = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens + reasoningOutputTokens;
-  if (explicitTotal && explicitTotal !== computedTotal) throw new Error('ccusage totalTokens does not match its token breakdown; review the source report before importing.');
+  const reasoningOutputTokens = tokenCount(row.reasoningTokens ?? row.reasoningOutputTokens ?? row.reasoning_output_tokens);
+  const rawTotal = row.totalTokens ?? row.total_tokens;
+  const explicitTotal = tokenCount(rawTotal);
+  const computedTotal = addTokenCounts(inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, reasoningOutputTokens);
+  if (rawTotal != null && explicitTotal !== computedTotal) throw new Error('ccusage totalTokens does not match its token breakdown; review the source report before importing.');
   return {
     inputTokens,
     outputTokens,
@@ -356,13 +358,10 @@ function mergeSessionRow(map, key, row) {
 }
 
 function addTokenFields(target, row) {
-  target.inputTokens += row.inputTokens || 0;
-  target.outputTokens += row.outputTokens || 0;
-  target.cacheCreationTokens += row.cacheCreationTokens || 0;
-  target.cacheReadTokens += row.cacheReadTokens || 0;
-  target.cachedInputTokens += row.cachedInputTokens || 0;
-  target.reasoningOutputTokens += row.reasoningOutputTokens || 0;
-  target.totalTokens += row.totalTokens || 0;
+  for (const key of ['inputTokens', 'outputTokens', 'cacheCreationTokens', 'cacheReadTokens',
+    'cachedInputTokens', 'reasoningOutputTokens', 'totalTokens']) {
+    target[key] = addTokenCounts(target[key], row[key]);
+  }
 }
 
 function firstUnsafeKeyPath(value, path = '$') {
@@ -408,12 +407,6 @@ function identityText(value, field, maxLength) {
   const text = String(value ?? '').trim();
   if (text.length > maxLength) throw new Error(`ccusage ${field} exceeds ${maxLength} characters; identities cannot be truncated safely.`);
   return text;
-}
-
-function integer(value) {
-  const number = Number(value || 0);
-  if (!Number.isFinite(number) || number < 0) return 0;
-  return Math.round(number);
 }
 
 function number(value) {
