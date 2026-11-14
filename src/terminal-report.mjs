@@ -1,10 +1,11 @@
 import { listAdvisorActions, listBudgetProfiles } from './db.mjs';
 import { buildLiveSnapshot } from './live.mjs';
+import { priceSessionRows } from './session-pricing.mjs';
 
 export function buildTerminalReport(db, { period = 'week', now = new Date() } = {}) {
   const range = periodRange(period, now);
   const daily = queryDaily(db, range);
-  const sessions = querySessions(db, range);
+  const sessions = priceSessionRows(db, querySessions(db, range));
   const tokenEvents = queryTokenEvents(db);
   const budgetProfiles = listBudgetProfiles(db).filter(profile => profile.enabled);
   const live = buildLiveSnapshot({ sessions, tokenEvents, budgetProfiles, now });

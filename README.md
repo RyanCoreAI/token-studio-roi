@@ -235,7 +235,7 @@ npm run privacy:check
 - `POST /api/work-items/link-sessions`
 - `DELETE /api/work-items/:id`
 
-所有非 public 的 `/api/*` 读接口也限制为 loopback + local Origin；普通写接口继续限制为 loopback、local Origin、JSON。`/api/ingest` 默认关闭，只有显式设置 `INGEST_TOKEN` 后才接受 `Authorization: Bearer <token>` 的 JSON 机器写入请求。服务端不信任 `X-Forwarded-For` 作为本机判断。服务默认只绑定 `127.0.0.1`；`HOST=0.0.0.0` 或其他非 loopback 绑定会被拒绝，除非显式设置 `TOKEN_STUDIO_ALLOW_REMOTE=1` 且提供 `INGEST_TOKEN`。这个远程模式只保留 ingest 场景，不会把普通 Dashboard API 开放成远程访问。
+所有非 public 的 `/api/*` 读接口限制为 loopback 连接、loopback Host 和 local HTTP(S) Origin；普通写接口还必须使用 JSON。`/api/ingest` 默认关闭，只有显式设置 `INGEST_TOKEN` 后才接受 `Authorization: Bearer <token>` 的 JSON 机器写入请求。服务端不信任 `X-Forwarded-For` 或 `127.example.com` 这类相似域名作为本机身份。服务默认只绑定 `127.0.0.1`；`HOST=0.0.0.0` 或其他非 loopback 绑定会被拒绝，除非显式设置 `TOKEN_STUDIO_ALLOW_REMOTE=1` 且提供 `INGEST_TOKEN`。这个远程模式只保留 ingest 场景，不会把普通 Dashboard API 开放成远程访问。导入快照、重复导入与旧身份核验规则见 [导入一致性说明](docs/import-integrity.md)。
 
 ## Development
 

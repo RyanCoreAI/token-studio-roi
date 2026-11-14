@@ -250,7 +250,9 @@ export function normalizeUsageRecord(row, fallback = {}) {
   ) || 'unknown-session';
   const projectLabel = projectLabelFrom(row);
   const eventId = firstString(row.eventId, row.event_id)
-    || stableEventId({ sessionId, timestamp, model, tokens, index: fallback.index });
+    // Keep previously generated IDs while correcting the accounting buckets.
+    // The legacy components are identity input only, never used for totals.
+    || stableEventId({ sessionId, timestamp, model, tokens: legacyIdentityTokens(row), index: fallback.index });
 
   return [{
     eventId,
@@ -266,14 +268,38 @@ export function normalizeUsageRecord(row, fallback = {}) {
   }];
 }
 
-function normalizeTokens(row) {
+export function normalizeTokens(row) {
   const tokenSource = row.tokens && typeof row.tokens === 'object' ? row.tokens : row.usage && typeof row.usage === 'object' ? row.usage : row;
+  const input = positive(tokenSource.inputTokens ?? tokenSource.input_tokens ?? tokenSource.promptTokens ?? tokenSource.prompt_tokens ?? tokenSource.input ?? tokenSource.prompt);
+  const output = positive(tokenSource.outputTokens ?? tokenSource.output_tokens ?? tokenSource.completionTokens ?? tokenSource.completion_tokens ?? tokenSource.output ?? tokenSource.completion);
+  const outputDetails = tokenSource.output_tokens_details || tokenSource.completion_tokens_details;
+  const inputDetails = tokenSource.input_tokens_details || tokenSource.prompt_tokens_details;
+  const rawCacheRead = positive(tokenSource.cacheReadTokens ?? tokenSource.cache_read_tokens ?? tokenSource.cacheRead ?? tokenSource.cache_read ?? tokenSource.cachedTokens ?? tokenSource.cached_tokens
+    ?? tokenSource.cache_read_input_tokens ?? inputDetails?.cached_tokens);
+  const cacheRead = inputDetails ? Math.min(input, rawCacheRead) : rawCacheRead;
+  const reasoning = positive(tokenSource.reasoningTokens ?? tokenSource.reasoning_tokens ?? tokenSource.thoughtsTokens ?? tokenSource.thoughts_tokens ?? tokenSource.reasoning
+    ?? outputDetails?.reasoning_tokens ?? outputDetails?.thinking_tokens);
+  // Explicit raw API usage uses inclusive counts. A normalized `tokens`
+  // payload already has exclusive buckets; do not subtract its fields twice.
+  const rawApiOutput = !row.tokens && (tokenSource.output_tokens != null || tokenSource.completion_tokens != null);
+  const splitReasoning = rawApiOutput ? Math.min(reasoning, output) : reasoning;
   return {
-    input: positive(tokenSource.inputTokens ?? tokenSource.input_tokens ?? tokenSource.promptTokens ?? tokenSource.prompt_tokens ?? tokenSource.input ?? tokenSource.prompt),
-    output: positive(tokenSource.outputTokens ?? tokenSource.output_tokens ?? tokenSource.completionTokens ?? tokenSource.completion_tokens ?? tokenSource.output ?? tokenSource.completion),
-    cacheRead: positive(tokenSource.cacheReadTokens ?? tokenSource.cache_read_tokens ?? tokenSource.cacheRead ?? tokenSource.cache_read ?? tokenSource.cachedTokens ?? tokenSource.cached_tokens),
-    cacheWrite: positive(tokenSource.cacheCreationTokens ?? tokenSource.cache_creation_tokens ?? tokenSource.cacheWriteTokens ?? tokenSource.cache_write_tokens ?? tokenSource.cacheWrite ?? tokenSource.cache_write),
-    reasoning: positive(tokenSource.reasoningTokens ?? tokenSource.reasoning_tokens ?? tokenSource.thoughtsTokens ?? tokenSource.thoughts_tokens ?? tokenSource.reasoning)
+    input: inputDetails ? Math.max(0, input - Math.min(input, cacheRead)) : input,
+    output: rawApiOutput ? output - splitReasoning : output,
+    cacheRead,
+    cacheWrite: positive(tokenSource.cacheCreationTokens ?? tokenSource.cache_creation_tokens ?? tokenSource.cacheWriteTokens ?? tokenSource.cache_write_tokens ?? tokenSource.cacheWrite ?? tokenSource.cache_write ?? tokenSource.cache_creation_input_tokens),
+    reasoning: splitReasoning
+  };
+}
+
+function legacyIdentityTokens(row) {
+  const tokens = row.tokens && typeof row.tokens === 'object' ? row.tokens : row.usage && typeof row.usage === 'object' ? row.usage : row;
+  return {
+    input: positive(tokens.inputTokens ?? tokens.input_tokens ?? tokens.promptTokens ?? tokens.prompt_tokens ?? tokens.input ?? tokens.prompt),
+    output: positive(tokens.outputTokens ?? tokens.output_tokens ?? tokens.completionTokens ?? tokens.completion_tokens ?? tokens.output ?? tokens.completion),
+    cacheRead: positive(tokens.cacheReadTokens ?? tokens.cache_read_tokens ?? tokens.cacheRead ?? tokens.cache_read ?? tokens.cachedTokens ?? tokens.cached_tokens),
+    cacheWrite: positive(tokens.cacheCreationTokens ?? tokens.cache_creation_tokens ?? tokens.cacheWriteTokens ?? tokens.cache_write_tokens ?? tokens.cacheWrite ?? tokens.cache_write),
+    reasoning: positive(tokens.reasoningTokens ?? tokens.reasoning_tokens ?? tokens.thoughtsTokens ?? tokens.thoughts_tokens ?? tokens.reasoning)
   };
 }
 

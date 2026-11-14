@@ -197,6 +197,8 @@ function mergeUsageMax(target, source) {
   ]) {
     target[key] = Math.max(Number(target[key] || 0), Number(source[key] || 0));
   }
+  const thinking = Math.max(Number(target.output_tokens_details?.thinking_tokens || 0), Number(source.output_tokens_details?.thinking_tokens || 0));
+  if (thinking) target.output_tokens_details = { ...target.output_tokens_details, thinking_tokens: thinking };
 }
 
 // ---------------------------------------------------------------------------
@@ -220,13 +222,17 @@ function zeroTokens() {
 }
 
 function extractTokens(usage) {
+  const output = Math.max(0, Number(usage.output_tokens) || 0);
+  const reasoning = Math.min(output, Math.max(0, Number(
+    usage.output_tokens_details?.thinking_tokens ?? usage.reasoning_tokens ?? usage.thinking_tokens
+  ) || 0));
   return {
     input: usage.input_tokens || 0,
-    output: usage.output_tokens || 0,
+    output: output - reasoning,
     cacheRead: usage.cache_read_input_tokens || 0,
     cacheWrite: usage.cache_creation_input_tokens || 0,
     // Newer models expose reasoning/thinking tokens
-    reasoning: usage.reasoning_tokens || usage.thinking_tokens || 0
+    reasoning
   };
 }
 
@@ -263,8 +269,8 @@ export async function collect(pricingData = null) {
       const records = await parseSessionFile(filePath);
       if (!records.length) continue;
       const sessionFileId = basename(filePath).replace(/\.jsonl$/i, '');
-      const primaryModel = primaryModelFor(records);
-      const sessionId = `local:${CLIENT_KEY}:${hashableSessionPart(sessionFileId)}:${primaryModel}`;
+      const sessionId = `local:${CLIENT_KEY}:v2:${stableHash(sessionFileId)}`;
+      const legacySessionPrefix = `local:${CLIENT_KEY}:${hashableSessionPart(sessionFileId)}:`;
 
       for (let index = 0; index < records.length; index += 1) {
         const record = records[index];
@@ -273,6 +279,8 @@ export async function collect(pricingData = null) {
           ...record,
           tokens,
           sessionId,
+          legacySessionPrefix,
+          legacyIdentityLossy: hashableSessionPart(sessionFileId) !== sessionFileId,
           workspaceKey,
           workspaceLabel,
           eventIndex: index
@@ -320,6 +328,8 @@ export async function collect(pricingData = null) {
     workspaceKey: wm.workspace,
     workspaceLabel: wm.workspaceLabel,
     sessionId: wm.sessionId,
+    legacySessionPrefix: wm.legacySessionPrefix,
+    legacyIdentityLossy: wm.legacyIdentityLossy,
     lastActivity: wm.lastActivity,
     model: wm.model,
     input: wm.input,
@@ -388,6 +398,8 @@ function aggregateRecord(record, dailyMap, sessionMap, pricingData) {
   if (!sessionMap.has(record.sessionId)) {
     sessionMap.set(record.sessionId, {
       sessionId: record.sessionId,
+      legacySessionPrefix: record.legacySessionPrefix,
+      legacyIdentityLossy: record.legacyIdentityLossy,
       workspace: record.workspaceKey,
       workspaceLabel: record.workspaceLabel,
       model,
@@ -423,13 +435,11 @@ function emptyAuditSummary() {
 function tokenEventFor(record) {
   const model = normalizeModelForGrouping(record.model);
   return {
-    eventId: `claude:${stableHash({
+    eventId: `claude:v2:${stableHash({
       sessionId: record.sessionId,
       dedupKey: record.dedupKey,
-      eventIndex: record.eventIndex,
-      timestamp: record.timestamp,
-      model,
-      tokens: record.tokens
+      eventIndex: record.dedupKey ? undefined : record.eventIndex,
+      timestamp: record.dedupKey ? undefined : record.timestamp
     })}`,
     source: CLIENT_KEY,
     sessionId: record.sessionId,
@@ -442,16 +452,6 @@ function tokenEventFor(record) {
     reasoningTokens: record.tokens.reasoning,
     privacyLevel: 'safe'
   };
-}
-
-function primaryModelFor(records) {
-  const byModel = new Map();
-  for (const record of records) {
-    const model = normalizeModelForGrouping(record.model);
-    const tokens = extractTokens(record.usage);
-    byModel.set(model, (byModel.get(model) || 0) + tokenTotal(tokens));
-  }
-  return [...byModel.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
 }
 
 function tokenTotal(tokens) {

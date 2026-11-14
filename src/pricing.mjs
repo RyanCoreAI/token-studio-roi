@@ -258,7 +258,7 @@ export function officialPricingMetadata(rows = []) {
     const tokens = tokenTotal(row);
     totalTokens += tokens;
     const cost = Number(row.costUSD || 0);
-    const priced = row.pricingStatus === 'priced' || cost > 0;
+    const priced = row.pricingStatus === 'priced' || (!row.pricingStatus && cost > 0);
     if (priced) {
       pricedTokens += tokens;
       pricedCostUSD += cost;

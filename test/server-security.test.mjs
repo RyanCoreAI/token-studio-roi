@@ -5,6 +5,9 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { request } from 'node:http';
+import { openDb, upsertDaily, upsertSession, upsertTokenEvent } from '../src/db.mjs';
+import { buildTerminalReport } from '../src/terminal-report.mjs';
 
 const guardedGetPaths = [
   '/api/data',
@@ -14,6 +17,58 @@ const guardedGetPaths = [
   '/api/project-alias-rules',
   '/api/collect/status'
 ];
+
+test('malformed Host receives 400 and the server continues serving valid requests', async () => {
+  const server = await startServer();
+  try {
+    for (const host of ['[', 'user@localhost', 'localhost/path']) {
+      const status = await new Promise((resolveStatus, reject) => {
+        const req = request({ host: '127.0.0.1', port: server.port, path: '/api/data', headers: { Host: host } }, res => {
+          res.resume(); res.on('end', () => resolveStatus(res.statusCode));
+        });
+        req.on('error', reject); req.end();
+      });
+      assert.equal(status, 400);
+      assert.equal(server.child.exitCode, null);
+    }
+    assert.equal((await fetch(`http://127.0.0.1:${server.port}/api/data`)).status, 200);
+  } finally { await server.stop(); }
+});
+
+test('mixed-model cost agrees across Dashboard, Live, summary and terminal report', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'token-studio-mixed-cost-'));
+  const dbPath = join(dir, 'usage.sqlite');
+  const identity = { device: 'fixture', source: 'Codex CLI', sessionId: 'local:codex:fixture:gpt-5.5' };
+  const now = new Date();
+  const timestamp = new Date(now.getTime() - 1000).toISOString();
+  const db = openDb(dbPath);
+  let server;
+  try {
+    upsertSession(db, { ...identity, projectPath: '/fixture/mixed', lastActivity: timestamp, inputTokens: 3000, totalTokens: 3000, costUSD: 0.01175 });
+    for (const [model, inputTokens, costUSD] of [['gpt-5.5', 2000, 0.01], ['gpt-5.3-codex', 1000, 0.00175]]) {
+      upsertTokenEvent(db, { ...identity, eventId: model, model, timestamp, inputTokens });
+      upsertDaily(db, { ...identity, usageDate: timestamp.slice(0, 10), model, inputTokens, totalTokens: inputTokens, costUSD });
+    }
+    const report = buildTerminalReport(db, { period: 'all', now });
+    assert.ok(Math.abs(report.totals.costUSD - 0.01175) < 1e-12);
+    assert.ok(Math.abs(report.topProjects[0].costUSD - 0.01175) < 1e-12);
+    db.close();
+    server = await startServer({ DB_PATH: dbPath });
+    const data = await (await fetch(`http://127.0.0.1:${server.port}/api/data`)).json();
+    assert.equal(data.sessions[0].model, 'mixed');
+    assert.ok(Math.abs(data.sessions[0].costUSD - 0.01175) < 1e-12);
+    assert.ok(Math.abs(data.daily.reduce((sum, row) => sum + row.costUSD, 0) - 0.01175) < 1e-12);
+    const live = await (await fetch(`http://127.0.0.1:${server.port}/api/live`)).json();
+    assert.ok(Math.abs(live.totals.costUSD - 0.01175) < 1e-12);
+    assert.ok(Math.abs(live.activeSessions[0].costUSD - 0.01175) < 1e-12);
+    const summary = await (await fetch(`http://127.0.0.1:${server.port}/api/summary`)).json();
+    assert.ok(Math.abs(summary.totals.costUSD - 0.01175) < 1e-12);
+  } finally {
+    try { db.close(); } catch { /* closed before spawning the server */ }
+    if (server) await server.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test('non-public GET APIs reject non-local Origin', async () => {
   const server = await startServer();
